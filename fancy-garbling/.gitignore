@@ -3,3 +3,4 @@ Cargo.lock
 deps/
 build/
 .tags*
+circuits/*.circuit.txt

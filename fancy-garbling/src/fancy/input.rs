@@ -21,7 +21,7 @@ pub trait FancyInput {
         &mut self,
         values: &[u16],
         moduli: &[u16],
-    ) -> Result<Vec<Self::Item>, Self::Error>;
+    ) -> Result<Vec<Self::Item>, Self::Error>;  // twopac::semihonest::garbler.rs, (in_vals, mods)->(Wire Zero or Wire Label)
 
     /// Receive many values where the input is not known.
     fn receive_many(&mut self, moduli: &[u16]) -> Result<Vec<Self::Item>, Self::Error>;
@@ -117,6 +117,9 @@ pub trait FancyInput {
     }
 
     /// Encode many CRT input bundles.
+    /// Transform the value to CRTs, then encode them to Wires, finally bundle.
+    /// * `values`: Vec<u128> - the values to encode
+    /// * `modulus`: u128 - the crt mods' multiplication, biggest moduli (ring) under a given bitwidth
     fn crt_encode_many(
         &mut self,
         values: &[u128],
@@ -126,7 +129,7 @@ pub trait FancyInput {
         let nmods = mods.len();
         let xs = values
             .iter()
-            .flat_map(|x| util::crt(*x, &mods))
+            .flat_map(|x| util::crt(*x, &mods))  // crt representation of all values packed into a single vector
             .collect_vec();
         let qs = itertools::repeat_n(mods, values.len())
             .flatten()
@@ -134,7 +137,7 @@ pub trait FancyInput {
         let mut wires = self.encode_many(&xs, &qs)?;
         let buns = (0..values.len())
             .map(|_| {
-                let ws = wires.drain(0..nmods).collect_vec();
+                let ws = wires.drain(0..nmods).collect_vec();  // drain part of the wires, instead of into_iter
                 CrtBundle::new(ws)
             })
             .collect_vec();

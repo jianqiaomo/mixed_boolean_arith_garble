@@ -224,7 +224,8 @@ impl<F: Fancy + FancyInput<Item = <F as Fancy>::Item, Error = <F as Fancy>::Erro
 
     fn receive_many(&mut self, moduli: &[u16]) -> Result<Vec<Self::Item>, Self::Error> {
         self.stats
-            .garbler_input_moduli
+            // .garbler_input_moduli
+            .evaluator_input_moduli
             .extend(moduli.iter().cloned());
         self.underlying.receive_many(moduli)
     }

@@ -346,6 +346,40 @@ pub fn is_power_of_2(x: u16) -> bool {
     (x & (x - 1)) == 0
 }
 
+/// Get p and k from q assuming `q = p^k`. 
+/// p is from PRIMES list.
+/// 
+/// Returns `(p, k)`
+pub fn q2pk(q: u16) -> (u16, u16) {
+    if q < 2 {
+        panic!(
+            "util: Modulus must be at least 2. Got {}",
+            q
+        );
+    }
+    for &p in PRIMES.iter() {
+        if q % p == 0 {  // p is a prime factor of q
+            let mut k = 0;
+            let mut power = 1u16;
+
+            while power < q {
+                power *= p;
+                k += 1;
+            }
+
+            if power == q {
+                debug_assert_eq!(q, p.pow(k as u32));
+                return (p, k);
+            }
+        }
+    }
+    panic!(
+        "util: Modulus q={} must be a prime power where prime is from PRIMES list {}",
+        q,
+        PRIMES.iter().map(|&x| x.to_string()).collect::<Vec<String>>().join(", ")
+    );
+}
+
 /// Generate deltas ahead of time for the Garbler.
 pub fn generate_deltas<Wire: WireLabel>(primes: &[u16]) -> HashMap<u16, Wire> {
     let mut deltas = HashMap::new();

@@ -66,9 +66,24 @@ impl FancyInput for Dummy {
             .collect())
     }
 
+    /// Although, receive is undefined for Dummy which is a single party "protocol",
+    /// I implement it to get correct communication cost in Informer.
+    /// 
+    /// Usage: bob_input = 
+    /// 
+    ///     encode(); // to get computation result number
+    /// 
+    ///     or receive();  // to get communication cost, but computation will show 0.
     fn receive_many(&mut self, _moduli: &[u16]) -> Result<Vec<DummyVal>, DummyError> {
         // Receive is undefined for Dummy which is a single party "protocol"
-        Err(DummyError::EncodingError)
+        // Err(DummyError::EncodingError)
+
+        let xs = vec![0; _moduli.len()];
+        Ok(xs
+            .iter()
+            .zip(_moduli.iter())
+            .map(|(x, q)| DummyVal::new(*x, *q))
+            .collect())
     }
 }
 
