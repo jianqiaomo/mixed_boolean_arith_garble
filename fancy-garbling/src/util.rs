@@ -346,19 +346,25 @@ pub fn is_power_of_2(x: u16) -> bool {
     (x & (x - 1)) == 0
 }
 
-/// Get p and k from q assuming `q = p^k`. 
+/// Get p and k from q assuming `q = p^k`.
 /// p is from PRIMES list.
-/// 
+///
 /// Returns `(p, k)`
 pub fn q2pk(q: u16) -> (u16, u16) {
+    base_q2pk(q, &PRIMES)
+}
+
+/// Get p and k from q assuming `q = p^k`.
+/// p is from available_primes list.
+///
+/// Returns `(p, k)`
+pub fn base_q2pk(q: u16, available_primes: &[u16]) -> (u16, u16) {
     if q < 2 {
-        panic!(
-            "util: Modulus must be at least 2. Got {}",
-            q
-        );
+        panic!("util: Modulus must be at least 2. Got {}", q);
     }
-    for &p in PRIMES.iter() {
-        if q % p == 0 {  // p is a prime factor of q
+    for &p in available_primes.iter() {
+        if q % p == 0 {
+            // p is a prime factor of q
             let mut k = 0;
             let mut power = 1u16;
 
@@ -374,10 +380,31 @@ pub fn q2pk(q: u16) -> (u16, u16) {
         }
     }
     panic!(
-        "util: Modulus q={} must be a prime power where prime is from PRIMES list {}",
+        "util: Modulus q={} must be a prime power where prime is from prime list {}",
         q,
-        PRIMES.iter().map(|&x| x.to_string()).collect::<Vec<String>>().join(", ")
+        available_primes
+            .iter()
+            .map(|&x| x.to_string())
+            .collect::<Vec<String>>()
+            .join(", ")
     );
+}
+
+/// Find a prime that is enough to fit n bits
+pub fn a_prime_with_width(n: u16) -> u16 {
+    base_a_prime_with_width(n, &PRIMES)
+}
+
+/// Find one prime that is enough to fit n bits, from available_primes list.
+pub fn base_a_prime_with_width(n: u16, available_primes: &[u16]) -> u16 {
+    available_primes
+        .iter()
+        .find(|&&x| (x >> n as u16) > 0)
+        .expect(&format!(
+            "[FancyArithmetic::bit_composition] No prime available to fit {} bits value.",
+            n
+        ))
+        .clone()
 }
 
 /// Generate deltas ahead of time for the Garbler.

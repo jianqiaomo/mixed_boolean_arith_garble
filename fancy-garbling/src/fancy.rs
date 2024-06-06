@@ -183,6 +183,26 @@ pub trait FancyArithmetic: Fancy {
         tt: Option<Vec<u16>>,
     ) -> Result<Self::Item, Self::Error>;
 
+    /// Decompose arithmetic wire AK into bits.
+    /// Returns a vector of wires Mod2. 
+    /// Link: <https://doi.org/10.1007/978-3-031-58751-1_12>
+    /// 
+    /// Assume k=1: We haven't supported arithmetic wire label prime p^k. 
+    /// It requires wire label size to be k*Block instead of Block. 
+    /// 
+    /// * `AK` - Arithmetic wire to be decomposed, modulus must be prime p.
+    // fn bit_decomposition(&mut self, AK: &Self::Item) -> Result<Vec<Self::Item>, Self::Error>;
+
+    /// Compose WireMod2 into arithmetic wire.
+    /// Returns wire in mod p^1. 
+    /// Link: <https://doi.org/10.1007/978-3-031-58751-1_12>
+    /// 
+    /// Assume k=1: We haven't supported arithmetic wire label prime p^k. 
+    /// It requires wire label size to be k*Block instead of Block. 
+    /// 
+    /// * `K_j` - Vector of WireMod2 to be composed into arithmetic wire.
+    fn bit_composition(&mut self, K_j: &Vec<&Self::Item>) -> Result<Self::Item, Self::Error>;
+
     ////////////////////////////////////////////////////////////////////////////////
     // Functions built on top of arithmetic fancy operations.
 

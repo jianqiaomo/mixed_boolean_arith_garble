@@ -26,6 +26,7 @@ pub struct InformerStats {
     ncmuls: usize,
     nmuls: usize,
     nprojs: usize,
+    ncompositions: usize,
     nciphertexts: usize,
     moduli: HashMap<u16, usize>,
 }
@@ -91,6 +92,11 @@ impl InformerStats {
         self.nprojs
     }
 
+    /// Number of bit compositions in the fancy computation.
+    pub fn num_compositions(&self) -> usize {
+        self.ncompositions
+    }
+
     /// Number of ciphertexts in the fancy computation.
     pub fn num_ciphertexts(&self) -> usize {
         self.nciphertexts
@@ -113,6 +119,7 @@ impl std::fmt::Display for InformerStats {
     ///   cmuls:                             0
     ///   projections:                       0
     ///   multiplications:                6800
+    ///   compositions:                      0
     ///   ciphertexts:                   13600 // comms cost: 1.66 Mb (1700.00 Kb)
     ///   total comms cost:            1.75 Mb // 1700.00 Kb
     /// ```
@@ -167,6 +174,7 @@ impl std::fmt::Display for InformerStats {
         writeln!(f, "  cmuls:              {:16}", self.num_cmuls())?;
         writeln!(f, "  projections:        {:16}", self.num_projs())?;
         writeln!(f, "  multiplications:    {:16}", self.num_muls())?;
+        writeln!(f, "  compositions:       {:16}", self.num_compositions())?;
         let cs = self.num_ciphertexts();
         let kb = cs as f64 * 128.0 / 1000.0;
         let mb = kb / 1000.0;
@@ -199,6 +207,7 @@ impl<F: Fancy> Informer<F> {
                 ncmuls: 0,
                 nmuls: 0,
                 nprojs: 0,
+                ncompositions: 0,
                 nciphertexts: 0,
                 moduli: HashMap::new(),
             },
@@ -306,6 +315,14 @@ impl<F: FancyArithmetic> FancyArithmetic for Informer<F> {
             self.stats.nciphertexts += 1;
         }
         self.update_moduli(x.modulus());
+        Ok(result)
+    }
+
+    fn bit_composition(&mut self, K_j: &Vec<&Self::Item>) -> Result<Self::Item, Self::Error> {
+        let result = self.underlying.bit_composition(K_j)?;
+        self.stats.ncompositions += 1;
+        self.stats.nciphertexts += (K_j.len() - 1) * 2;
+        self.update_moduli(crate::util::a_prime_with_width(K_j.len() as u16));
         Ok(result)
     }
 

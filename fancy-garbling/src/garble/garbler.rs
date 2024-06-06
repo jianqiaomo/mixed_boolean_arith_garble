@@ -3,7 +3,7 @@ use crate::{
     errors::{FancyError, GarblerError},
     fancy::{BinaryBundle, CrtBundle, Fancy, FancyReveal},
     hash_wires,
-    util::{output_tweak, tweak, tweak2, RngExt},
+    util::{output_tweak, tweak, tweak2, RngExt, a_prime_with_width},
     AllWire, ArithmeticWire, FancyArithmetic, FancyBinary, HasModulus, WireLabel, WireMod2,
 };
 use rand::{CryptoRng, RngCore};
@@ -456,6 +456,68 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel + ArithmeticW
             self.channel.write_block(block)?;
         }
         Ok(C)
+    }
+
+    // fn bit_decomposition(&mut self, AK: &Self::Item) -> Result<Vec<Self::Item>, Self::Error> {
+    //     let q = AK.modulus();
+    //     // bit decomposition takes mod q=p^k where p is in PRIMES.
+    //     debug_assert!(PRIMES.iter().any(|&p| p == q2pk(q).0));
+    //     let p: u16 = q;
+    //     let k: u16 = 1;
+    //     let mut A_i: Vec<Wire> = vec![AK.clone()];
+    //     A_i.extend((1..k).map(|_| Wire::rand(&mut self.rng, p)));
+    // }
+
+    fn bit_composition(&mut self, K_j: &Vec<&Wire>) -> Result<Wire, GarblerError> {
+        // Assume all K_j is mod 2 (Boolean)
+        debug_assert!(K_j.iter().all(|x| x.modulus() == 2));
+
+        let j = K_j.len();
+        // p is output wire prime that is enough to fit j bits
+        let p = a_prime_with_width(j as u16);
+
+        let A = self.delta(p); // A is the delta of output WireModp
+        let B = self.encode_wire(0, p).0; // B is the zero wire of output WireModp
+        let mut B_j: Vec<Wire> = (0..j - 1) // Sample random B_j satisfying sum(B_j) mod p = B
+            .map(|_| Wire::rand(&mut self.rng, p))
+            .collect::<Vec<Wire>>();
+        B_j.push(B.minus(&B_j.iter().fold(Wire::zero(p), |acc, x| acc.plus(x))));
+
+        let gate_num = self.current_gate();
+        let mod2_delta = self.delta(2);
+        // C_{j, beta + alpha_j} =
+        //     left: H(K_j(beta); (id, j))
+        //     XOR
+        //     right: B_j + 2^j * beta * A
+        let Tab: Vec<Block> = (0..j)
+            .flat_map(|jth| {
+                let alpha = K_j[jth].color();
+                let g = tweak2(gate_num as u64, jth as u64);
+                let left = hash_wires(
+                    [
+                        &K_j[jth].plus(&mod2_delta.cmul(alpha)),
+                        &K_j[jth].plus(&mod2_delta.cmul((alpha + 1) & 1)),
+                    ],
+                    g,
+                );
+                let right = (0..2)
+                    .map(|b| {
+                        let A_const = (1 << jth) as u16 * ((alpha + b) & 1);
+                        B_j[jth].plus(&A.cmul(A_const)).as_block()
+                    })
+                    .collect::<Vec<Block>>();
+                left.iter()
+                    .zip(right.iter())
+                    .map(|(&l, &r)| l ^ r)
+                    .collect::<Vec<Block>>()
+            })
+            .collect::<Vec<Block>>();
+
+        for block in Tab.iter() {
+            self.channel.write_block(block)?;
+        }
+
+        Ok(B)
     }
 }
 

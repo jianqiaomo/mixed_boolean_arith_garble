@@ -140,6 +140,17 @@ pub enum ArithmeticGate {
         /// Output wire index
         out: Option<usize>,
     },
+    /// Bit composition gate
+    BitComposition {
+        /// References to input wires
+        xrefs: Vec<CircuitRef>,
+
+        /// Gate number
+        id: usize,
+
+        /// Output wire index
+        out: Option<usize>,
+    },
 }
 
 /// Binary computation supported by fancy garbling.
@@ -215,6 +226,9 @@ impl std::fmt::Display for ArithmeticGate {
                 id,
                 out,
             } => write!(f, "Mul ( {}, {}, {}, {:?} )", xref, yref, id, out),
+            Self::BitComposition { xrefs, id, out } => {
+                write!(f, "BitComposition ( {:?}, {}, {:?} )", xrefs, id, out)
+            }
             Self::Proj { xref, tt, id, out } => {
                 write!(f, "Proj ( {}, {:?}, {}, {:?} )", xref, tt, id, out)
             }
@@ -347,6 +361,20 @@ impl<F: FancyArithmetic> EvaluableCircuit<F> for ArithmeticCircuit {
                             .ok_or_else(|| F::Error::from(FancyError::UninitializedValue))?,
                         q,
                         Some(tt.to_vec()),
+                    )?,
+                ),
+                ArithmeticGate::BitComposition { ref xrefs, out, .. } => (
+                    out,
+                    f.bit_composition(
+                        xrefs
+                            .iter()
+                            .map(|r| {
+                                cache[r.ix]
+                                    .as_ref()
+                                    .ok_or_else(|| F::Error::from(FancyError::UninitializedValue))
+                            })
+                            .collect::<Result<Vec<_>, _>>()?
+                            .as_ref()
                     )?,
                 ),
                 ArithmeticGate::Mul {
@@ -826,6 +854,16 @@ impl FancyArithmetic for CircuitBuilder<ArithmeticCircuit> {
             id: self.get_next_ciphertext_id(),
             out: None,
         };
+        Ok(self.gate(gate, output_modulus))
+    }
+
+    fn bit_composition(&mut self, K_j: &Vec<&CircuitRef>) -> Result<CircuitRef, Self::Error> {
+        let gate = ArithmeticGate::BitComposition {
+            xrefs: K_j.iter().map(|&&r| r).collect::<Vec<CircuitRef>>(),
+            id: self.get_next_ciphertext_id(),
+            out: None,
+        };
+        let output_modulus = crate::util::a_prime_with_width(K_j.len() as u16);
         Ok(self.gate(gate, output_modulus))
     }
 

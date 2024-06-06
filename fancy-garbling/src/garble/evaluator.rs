@@ -5,7 +5,7 @@ use crate::{
     errors::{EvaluatorError, FancyError},
     fancy::{Fancy, FancyReveal},
     hash_wires,
-    util::{output_tweak, tweak, tweak2},
+    util::{a_prime_with_width, output_tweak, tweak, tweak2},
     wire::WireLabel,
     AllWire, ArithmeticWire, FancyArithmetic, FancyBinary, HasModulus, WireMod2,
 };
@@ -231,6 +231,35 @@ impl<C: AbstractChannel, Wire: WireLabel + ArithmeticWire> FancyArithmetic for E
             let ct = gate[x.color() as usize - 1];
             Ok(Wire::from_block(ct ^ x.hash(t), q))
         }
+    }
+
+    fn bit_composition(&mut self, K_j: &Vec<&Wire>) -> Result<Wire, EvaluatorError> {
+        // Assume all K_j is mod 2 (Boolean)
+        debug_assert!(K_j.iter().all(|x| x.modulus() == 2));
+
+        let j = K_j.len();
+        // p is output wire prime that is enough to fit j bits
+        let p = a_prime_with_width(j as u16);
+
+        let mut Tab = Vec::with_capacity(j * 2);
+        for _ in 0..(j * 2) {
+            let block = self.channel.read_block()?;
+            Tab.push(block);
+        }
+        let gate_num = self.current_gate();
+
+        let L: Wire = (0..j)
+            .map(|jth| {
+                let x_bar = K_j[jth].color();
+                let g = tweak2(gate_num as u64, jth as u64);
+                let hash = K_j[jth].hash(g);
+                let L_j = hash ^ Tab[jth * 2 + x_bar as usize];
+                let wire = Wire::from_block(L_j, p);
+                wire
+            })
+            .fold(Wire::zero(p), |acc, x| acc.plus(&x));
+
+        Ok(L)
     }
 }
 

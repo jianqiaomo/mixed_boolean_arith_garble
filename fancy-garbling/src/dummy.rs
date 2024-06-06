@@ -124,6 +124,15 @@ impl FancyArithmetic for Dummy {
         })
     }
 
+    fn bit_composition(&mut self, K_j: &Vec<&DummyVal>) -> Result<DummyVal, Self::Error> {
+        Ok(DummyVal {
+            val: K_j.iter().enumerate().fold(0, |acc, (i, x)| {
+                acc + (x.val << i)
+            }),
+            modulus: crate::util::a_prime_with_width(K_j.len() as u16),
+        })
+    }
+
     fn proj(
         &mut self,
         x: &DummyVal,
