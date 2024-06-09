@@ -178,17 +178,40 @@ pub fn u128_from_bits(bs: &[u16]) -> u128 {
 /// ⌈log2(q)⌉: Determine the number of bits needed to represent a u16 modulus.
 pub fn bits_per_modulus(q: u16) -> u16 {
     if q > 1 {
-        let mod_ring_upper_bound = q - 1;
-        let mut num_bits = 16;
-        while num_bits > 0 {
-            if (mod_ring_upper_bound >> (num_bits - 1)) & 1 == 1 {
-                break;
+        if q == 2 {
+            1
+        } else if q <= 4 {
+            2
+        } else if q <= 8 {
+            3
+        } else if q <= 16 {
+            4
+        } else if q <= 32 {
+            5
+        } else if q <= 64 {
+            6
+        } else if q <= 128 {
+            7
+        } else if q <= 256 {
+            8
+        } else if q <= 512 {
+            9
+        } else {
+            let mod_ring_upper_bound = q - 1;
+            let mut num_bits = 16;
+            while num_bits > 0 {
+                if (mod_ring_upper_bound >> (num_bits - 1)) & 1 == 1 {
+                    break;
+                }
+                num_bits -= 1;
             }
-            num_bits -= 1;
+            num_bits
         }
-        num_bits
     } else {
-        panic!("[util::bits_per_modulus] Modulus must be at least 2. Got {}", q);
+        panic!(
+            "[util::bits_per_modulus] Modulus must be at least 2. Got {}",
+            q
+        );
     }
 }
 
@@ -378,33 +401,36 @@ pub fn q2pk(q: u16) -> (u16, u16) {
 pub fn base_q2pk(q: u16, available_primes: &[u16]) -> (u16, u16) {
     if q < 2 {
         panic!("util: Modulus must be at least 2. Got {}", q);
-    }
-    for &p in available_primes.iter() {
-        if q % p == 0 {
-            // p is a prime factor of q
-            let mut k = 0;
-            let mut power = 1u16;
+    } else if available_primes.contains(&q) {
+        return (q, 1);
+    } else {
+        for &p in available_primes.iter() {
+            if q % p == 0 {
+                // p is a prime factor of q
+                let mut k = 0;
+                let mut power = 1u16;
 
-            while power < q {
-                power *= p;
-                k += 1;
-            }
+                while power < q {
+                    power *= p;
+                    k += 1;
+                }
 
-            if power == q {
-                debug_assert_eq!(q, p.pow(k as u32));
-                return (p, k);
+                if power == q {
+                    debug_assert_eq!(q, p.pow(k as u32));
+                    return (p, k);
+                }
             }
         }
+        panic!(
+            "util: Modulus q={} must be a prime power where prime is from prime list {}",
+            q,
+            available_primes
+                .iter()
+                .map(|&x| x.to_string())
+                .collect::<Vec<String>>()
+                .join(", ")
+        );
     }
-    panic!(
-        "util: Modulus q={} must be a prime power where prime is from prime list {}",
-        q,
-        available_primes
-            .iter()
-            .map(|&x| x.to_string())
-            .collect::<Vec<String>>()
-            .join(", ")
-    );
 }
 
 /// Find a prime that is enough to fit n bits
