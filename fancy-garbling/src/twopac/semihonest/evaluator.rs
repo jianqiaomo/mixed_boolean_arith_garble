@@ -146,7 +146,11 @@ impl<C: AbstractChannel, RNG, OT, Wire: WireLabel + ArithmeticWire> FancyArithme
         self.evaluator.proj(x, q, tt).map_err(Self::Error::from)
     }
 
-    fn bit_composition(&mut self, K_j: &Vec<&Self::Item>) -> Result<Self::Item, Self::Error> {
+    fn bit_decomposition(&mut self, AK: &Wire) -> Result<Vec<Self::Item>, Self::Error> {
+        self.evaluator.bit_decomposition(AK).map_err(Self::Error::from)
+    }
+
+    fn bit_composition(&mut self, K_j: &Vec<&Wire>) -> Result<Self::Item, Self::Error> {
         self.evaluator.bit_composition(K_j).map_err(Self::Error::from)
     }
 }

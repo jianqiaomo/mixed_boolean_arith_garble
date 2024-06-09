@@ -7,6 +7,7 @@ use crate::{
     check_binary, derive_binary,
     errors::{DummyError, FancyError},
     fancy::{Fancy, FancyInput, FancyReveal, HasModulus},
+    util::bits_per_modulus,
     FancyArithmetic, FancyBinary,
 };
 
@@ -122,6 +123,21 @@ impl FancyArithmetic for Dummy {
             val: x.val * y.val % x.modulus,
             modulus: x.modulus,
         })
+    }
+
+    fn bit_decomposition(&mut self, AK: &DummyVal) -> Result<Vec<DummyVal>, Self::Error> {
+        let mut res = Vec::new();
+        let mut val = AK.val;
+        let modulus = AK.modulus;
+        let num_bits = bits_per_modulus(modulus);
+        for _ in 0..num_bits {
+            res.push(DummyVal {
+                val: val & 1,
+                modulus: 2,
+            });
+            val >>= 1;
+        }
+        Ok(res)
     }
 
     fn bit_composition(&mut self, K_j: &Vec<&DummyVal>) -> Result<DummyVal, Self::Error> {

@@ -3,7 +3,7 @@ use crate::{
     errors::{FancyError, GarblerError},
     fancy::{BinaryBundle, CrtBundle, Fancy, FancyReveal},
     hash_wires,
-    util::{output_tweak, tweak, tweak2, RngExt, a_prime_with_width},
+    util::{a_prime_with_width, bits_per_modulus, output_tweak, q2pk, tweak, tweak2, RngExt},
     AllWire, ArithmeticWire, FancyArithmetic, FancyBinary, HasModulus, WireLabel, WireMod2,
 };
 use rand::{CryptoRng, RngCore};
@@ -458,15 +458,46 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel + ArithmeticW
         Ok(C)
     }
 
-    // fn bit_decomposition(&mut self, AK: &Self::Item) -> Result<Vec<Self::Item>, Self::Error> {
-    //     let q = AK.modulus();
-    //     // bit decomposition takes mod q=p^k where p is in PRIMES.
-    //     debug_assert!(PRIMES.iter().any(|&p| p == q2pk(q).0));
-    //     let p: u16 = q;
-    //     let k: u16 = 1;
-    //     let mut A_i: Vec<Wire> = vec![AK.clone()];
-    //     A_i.extend((1..k).map(|_| Wire::rand(&mut self.rng, p)));
-    // }
+    fn bit_decomposition(&mut self, AK: &Wire) -> Result<Vec<Wire>, Self::Error> {
+        let q = AK.modulus();
+        // bit decomposition takes mod q=p^k where p is in PRIMES. (assuming k=1)
+        debug_assert!(1 == q2pk(q).1);
+        let p = q2pk(q).0; // let p = q;
+        let j = bits_per_modulus(p);
+
+        let K_j = self
+            .encode_many_wires(&vec![0; j as usize], &vec![2; j as usize])?
+            .0;
+        let A = AK.clone();
+        let alpha = A.color();
+        let gate_num = self.current_gate();
+        let modp_delta = self.delta(p);
+        let mod2_delta = self.delta(2);
+
+        // C_{j, beta + alpha} =
+        //     left: H(A + beta * modp_delta; (id, 0))
+        //     XOR
+        //     right: K_j(beta_j)
+        let Tab: Vec<Block> = (0..p)
+            .flat_map(|beta_th| {
+                let beta = (p - alpha + beta_th) % p;
+                let g = tweak2(gate_num as u64, 0);
+                let left = A.plus(&modp_delta.cmul(beta)).hash(g);
+                let right = (0..j)
+                    .map(|jth| {
+                        let beta_j = (beta >> jth) as u16 & 1;
+                        K_j[jth as usize].plus(&mod2_delta.cmul(beta_j)).as_block()
+                    })
+                    .collect::<Vec<Block>>();
+                right.iter().map(|&r| left ^ r).collect::<Vec<Block>>()
+            })
+            .collect::<Vec<Block>>(); // (j * p) blocks
+
+        for block in Tab.iter() {
+            self.channel.write_block(block)?;
+        }
+        Ok(K_j)
+    }
 
     fn bit_composition(&mut self, K_j: &Vec<&Wire>) -> Result<Wire, GarblerError> {
         // Assume all K_j is mod 2 (Boolean)
@@ -516,7 +547,6 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel + ArithmeticW
         for block in Tab.iter() {
             self.channel.write_block(block)?;
         }
-
         Ok(B)
     }
 }

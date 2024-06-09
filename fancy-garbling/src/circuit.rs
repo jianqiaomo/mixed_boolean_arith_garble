@@ -151,6 +151,17 @@ pub enum ArithmeticGate {
         /// Output wire index
         out: Option<usize>,
     },
+    /// Bit decomposition gate
+    BitDecomposition {
+        /// Reference to input wire
+        xref: CircuitRef,
+
+        /// Gate number
+        id: usize,
+
+        /// Output wire indices
+        outs: Vec<Option<usize>>,
+    },
 }
 
 /// Binary computation supported by fancy garbling.
@@ -228,6 +239,9 @@ impl std::fmt::Display for ArithmeticGate {
             } => write!(f, "Mul ( {}, {}, {}, {:?} )", xref, yref, id, out),
             Self::BitComposition { xrefs, id, out } => {
                 write!(f, "BitComposition ( {:?}, {}, {:?} )", xrefs, id, out)
+            }
+            Self::BitDecomposition { xref, id, outs } => {
+                write!(f, "BitDecomposition ( {}, {}, {:?} )", xref, id, outs)
             }
             Self::Proj { xref, tt, id, out } => {
                 write!(f, "Proj ( {}, {:?}, {}, {:?} )", xref, tt, id, out)
@@ -309,7 +323,7 @@ impl<F: FancyArithmetic> EvaluableCircuit<F> for ArithmeticCircuit {
         for (i, gate) in self.gates.iter().enumerate() {
             let q = self.modulus(i);
             let (zref_, val) = match *gate {
-                ArithmeticGate::GarblerInput { id } => (None, garbler_inputs[id].clone()),
+                ArithmeticGate::GarblerInput { id } => (vec![None], vec![garbler_inputs[id].clone()]),
                 ArithmeticGate::EvaluatorInput { id } => {
                     assert!(
                         id < evaluator_inputs.len(),
@@ -317,55 +331,63 @@ impl<F: FancyArithmetic> EvaluableCircuit<F> for ArithmeticCircuit {
                         id,
                         evaluator_inputs.len()
                     );
-                    (None, evaluator_inputs[id].clone())
+                    (vec![None], vec![evaluator_inputs[id].clone()])
                 }
-                ArithmeticGate::Constant { val } => (None, f.constant(val, q)?),
+                ArithmeticGate::Constant { val } => (vec![None], vec![f.constant(val, q)?]),
                 ArithmeticGate::Add { xref, yref, out } => (
-                    out,
-                    f.add(
+                    vec![out],
+                    vec![f.add(
                         cache[xref.ix]
                             .as_ref()
                             .ok_or_else(|| F::Error::from(FancyError::UninitializedValue))?,
                         cache[yref.ix]
                             .as_ref()
                             .ok_or_else(|| F::Error::from(FancyError::UninitializedValue))?,
-                    )?,
+                    )?],
                 ),
                 ArithmeticGate::Sub { xref, yref, out } => (
-                    out,
-                    f.sub(
+                    vec![out],
+                    vec![f.sub(
                         cache[xref.ix]
                             .as_ref()
                             .ok_or_else(|| F::Error::from(FancyError::UninitializedValue))?,
                         cache[yref.ix]
                             .as_ref()
                             .ok_or_else(|| F::Error::from(FancyError::UninitializedValue))?,
-                    )?,
+                    )?],
                 ),
                 ArithmeticGate::Cmul { xref, c, out } => (
-                    out,
-                    f.cmul(
+                    vec![out],
+                    vec![f.cmul(
                         cache[xref.ix]
                             .as_ref()
                             .ok_or_else(|| F::Error::from(FancyError::UninitializedValue))?,
                         c,
-                    )?,
+                    )?],
                 ),
                 ArithmeticGate::Proj {
                     xref, ref tt, out, ..
                 } => (
-                    out,
-                    f.proj(
+                    vec![out],
+                    vec![f.proj(
                         cache[xref.ix]
                             .as_ref()
                             .ok_or_else(|| F::Error::from(FancyError::UninitializedValue))?,
                         q,
                         Some(tt.to_vec()),
+                    )?],
+                ),
+                ArithmeticGate::BitDecomposition { xref, ref outs, .. } => (
+                    outs.iter().map(|&o| o).collect(),
+                    f.bit_decomposition(
+                        cache[xref.ix]
+                            .as_ref()
+                            .ok_or_else(|| F::Error::from(FancyError::UninitializedValue))?,
                     )?,
                 ),
                 ArithmeticGate::BitComposition { ref xrefs, out, .. } => (
-                    out,
-                    f.bit_composition(
+                    vec![out],
+                    vec![f.bit_composition(
                         xrefs
                             .iter()
                             .map(|r| {
@@ -374,24 +396,26 @@ impl<F: FancyArithmetic> EvaluableCircuit<F> for ArithmeticCircuit {
                                     .ok_or_else(|| F::Error::from(FancyError::UninitializedValue))
                             })
                             .collect::<Result<Vec<_>, _>>()?
-                            .as_ref()
-                    )?,
+                            .as_ref(),
+                    )?],
                 ),
                 ArithmeticGate::Mul {
                     xref, yref, out, ..
                 } => (
-                    out,
-                    f.mul(
+                    vec![out],
+                    vec![f.mul(
                         cache[xref.ix]
                             .as_ref()
                             .ok_or_else(|| F::Error::from(FancyError::UninitializedValue))?,
                         cache[yref.ix]
                             .as_ref()
                             .ok_or_else(|| F::Error::from(FancyError::UninitializedValue))?,
-                    )?,
+                    )?],
                 ),
             };
-            cache[zref_.unwrap_or(i)] = Some(val);
+            zref_.iter().zip(val.iter()).for_each(|(z, v)| {
+                cache[z.unwrap_or(i)] = Some(v.clone());
+            });
         }
         let mut outputs = Vec::with_capacity(self.noutputs());
         for r in self.get_output_refs().iter() {
@@ -865,6 +889,24 @@ impl FancyArithmetic for CircuitBuilder<ArithmeticCircuit> {
         };
         let output_modulus = crate::util::a_prime_with_width(K_j.len() as u16);
         Ok(self.gate(gate, output_modulus))
+    }
+
+    fn bit_decomposition(&mut self, AK: &CircuitRef) -> Result<Vec<CircuitRef>, Self::Error> {
+        let id = self.get_next_ciphertext_id();
+        let output_bits_num = crate::util::bits_per_modulus(AK.modulus());
+        let gate = (0..output_bits_num)
+            .map(|_| {
+                self.gate(
+                    ArithmeticGate::BitDecomposition {
+                        xref: *AK,
+                        id,
+                        outs: vec![None; output_bits_num as usize],
+                    },
+                    2,
+                )
+            })
+            .collect();
+        Ok(gate)
     }
 
     fn mul(&mut self, xref: &CircuitRef, yref: &CircuitRef) -> Result<CircuitRef, Self::Error> {

@@ -164,11 +164,11 @@ impl<C: AbstractChannel, RNG: CryptoRng + Rng, OT, Wire: WireLabel + ArithmeticW
         self.garbler.proj(x, q, tt).map_err(Self::Error::from)
     }
 
-    // fn bit_decomposition(&mut self, AK: &Self::Item) -> Result<Vec<Self::Item>, Self::Error>{
-    //     self.garbler.bit_decomposition(AK).map_err(Self::Error::from)
-    // }
+    fn bit_decomposition(&mut self, AK: &Wire) -> Result<Vec<Self::Item>, Self::Error>{
+        self.garbler.bit_decomposition(AK).map_err(Self::Error::from)
+    }
 
-    fn bit_composition(&mut self, K_j: &Vec<&Self::Item>) -> Result<Self::Item, Self::Error> {
+    fn bit_composition(&mut self, K_j: &Vec<&Wire>) -> Result<Self::Item, Self::Error> {
         self.garbler.bit_composition(K_j).map_err(Self::Error::from)
     }
 }

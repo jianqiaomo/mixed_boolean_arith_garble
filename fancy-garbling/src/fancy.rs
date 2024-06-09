@@ -191,7 +191,7 @@ pub trait FancyArithmetic: Fancy {
     /// It requires wire label size to be k*Block instead of Block. 
     /// 
     /// * `AK` - Arithmetic wire to be decomposed, modulus must be prime p.
-    // fn bit_decomposition(&mut self, AK: &Self::Item) -> Result<Vec<Self::Item>, Self::Error>;
+    fn bit_decomposition(&mut self, AK: &Self::Item) -> Result<Vec<Self::Item>, Self::Error>;
 
     /// Compose WireMod2 into arithmetic wire.
     /// Returns wire in mod p^1. 

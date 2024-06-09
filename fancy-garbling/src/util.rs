@@ -175,6 +175,23 @@ pub fn u128_from_bits(bs: &[u16]) -> u128 {
     x
 }
 
+/// ⌈log2(q)⌉: Determine the number of bits needed to represent a u16 modulus.
+pub fn bits_per_modulus(q: u16) -> u16 {
+    if q > 1 {
+        let mod_ring_upper_bound = q - 1;
+        let mut num_bits = 16;
+        while num_bits > 0 {
+            if (mod_ring_upper_bound >> (num_bits - 1)) & 1 == 1 {
+                break;
+            }
+            num_bits -= 1;
+        }
+        num_bits
+    } else {
+        panic!("[util::bits_per_modulus] Modulus must be at least 2. Got {}", q);
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // primes & crt
 

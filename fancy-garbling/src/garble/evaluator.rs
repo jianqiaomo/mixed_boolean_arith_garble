@@ -5,7 +5,7 @@ use crate::{
     errors::{EvaluatorError, FancyError},
     fancy::{Fancy, FancyReveal},
     hash_wires,
-    util::{a_prime_with_width, output_tweak, tweak, tweak2},
+    util::{a_prime_with_width, bits_per_modulus, output_tweak, q2pk, tweak, tweak2},
     wire::WireLabel,
     AllWire, ArithmeticWire, FancyArithmetic, FancyBinary, HasModulus, WireMod2,
 };
@@ -231,6 +231,34 @@ impl<C: AbstractChannel, Wire: WireLabel + ArithmeticWire> FancyArithmetic for E
             let ct = gate[x.color() as usize - 1];
             Ok(Wire::from_block(ct ^ x.hash(t), q))
         }
+    }
+
+    fn bit_decomposition(&mut self, AK: &Wire) -> Result<Vec<Wire>, Self::Error> {
+        let q = AK.modulus();
+        // bit decomposition takes mod q=p^k where p is in PRIMES. (assuming k=1)
+        debug_assert!(1 == q2pk(q).1);
+        let p = q2pk(q).0; // let p = q;
+        let j = bits_per_modulus(p);
+
+        let gate_num = self.current_gate();
+        let x_bar = AK.color();
+
+        let mut Tab = Vec::with_capacity((j * p) as usize);
+        for _ in 0..((j * p) as usize) {
+            let block = self.channel.read_block()?;
+            Tab.push(block);
+        }
+
+        let l_j: Vec<Wire> = (0..j)
+            .map(|jth| {
+                let g = tweak2(gate_num as u64, 0);
+                let left = AK.hash(g);
+                let right = Tab[(x_bar * j + jth) as usize];
+                let result: Block = left ^ right;
+                Wire::from_block(result, 2)
+            })
+            .collect();
+        Ok(l_j)
     }
 
     fn bit_composition(&mut self, K_j: &Vec<&Wire>) -> Result<Wire, EvaluatorError> {
