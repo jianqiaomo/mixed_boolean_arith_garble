@@ -5,6 +5,7 @@ use crate::{
     errors::{EvaluatorError, FancyError},
     fancy::{Fancy, FancyReveal},
     hash_wires,
+    mod2k::{Mod2kArithmetic, WireLabelMod2k, WireMod2k},
     util::{a_prime_with_width, bits_per_modulus, output_tweak, q2pk, tweak, tweak2},
     wire::WireLabel,
     AllWire, ArithmeticWire, FancyArithmetic, FancyBinary, HasModulus, WireMod2,
@@ -288,6 +289,33 @@ impl<C: AbstractChannel, Wire: WireLabel + ArithmeticWire> FancyArithmetic for E
             .fold(Wire::zero(p), |acc, x| acc.plus(&x));
 
         Ok(L)
+    }
+}
+
+impl<C: AbstractChannel, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, Wire> {
+    type Item = WireMod2k;
+    type W = Wire;
+    type Error = EvaluatorError;
+
+    fn mod_qto2k(&mut self, x: &Self::W, _: Option<&Self::Item>, k_out: u16) -> Result<Self::Item, Self::Error> {
+        let k = k_out; // let k = delta2k.k();
+        let ngates = (x.modulus() - 1) as usize;
+        let mut gate = Vec::with_capacity(ngates);
+        for _ in 0..ngates {
+            let mut blocks = Vec::with_capacity(ngates);
+            for _ in 0..k {
+                blocks.push(self.channel.read_block()?);
+            }
+            gate.push(blocks);
+        }
+        let g = self.current_gate();
+        let t = tweak(g);
+        if x.color() == 0 {
+            Ok(WireMod2k::zero(k_out).xor_hash_ofb_back(t, x.as_block())) // Ok(x.hashback(t, q))
+        } else {
+            let ct = gate[x.color() as usize - 1].clone();
+            Ok(WireMod2k::from_blocks(ct, k_out).xor_hash_ofb_back(t, x.as_block())) // Ok(Wire::from_block(ct ^ x.hash(t), q))
+        }
     }
 }
 

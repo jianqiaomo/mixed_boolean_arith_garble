@@ -3,6 +3,7 @@ use crate::{
     errors::{FancyError, GarblerError},
     fancy::{BinaryBundle, CrtBundle, Fancy, FancyReveal},
     hash_wires,
+    mod2k::{Mod2kArithmetic, WireLabelMod2k, WireMod2k},
     util::{a_prime_with_width, bits_per_modulus, output_tweak, q2pk, tweak, tweak2, RngExt},
     AllWire, ArithmeticWire, FancyArithmetic, FancyBinary, HasModulus, WireLabel, WireMod2,
 };
@@ -548,6 +549,75 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel + ArithmeticW
             self.channel.write_block(block)?;
         }
         Ok(B)
+    }
+}
+
+impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithmetic
+    for Garbler<C, RNG, Wire>
+{
+    type Item = WireMod2k;
+    type W = Wire;
+    type Error = GarblerError;
+
+    // fn add(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, Self::Error> {
+    //     if x.modulus() != y.modulus() {
+    //         return Err(GarblerError::FancyError(FancyError::UnequalModuli));
+    //     }
+    //     Ok(x.plus(y))
+    // }
+
+    // fn sub(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, Self::Error> {
+    //     if x.modulus() != y.modulus() {
+    //         return Err(GarblerError::FancyError(FancyError::UnequalModuli));
+    //     }
+    //     Ok(x.minus(y))
+    // }
+
+    // fn cmul(&mut self, x: &Self::Item, c: crate::mod2k::U) -> Result<Self::Item, Self::Error> {
+    //     Ok(x.cmul(c))
+    // }
+
+    fn mod_qto2k(
+        &mut self,
+        x: &Self::W,
+        delta2k: Option<&Self::Item>,
+        k_out: u16,
+    ) -> Result<Self::Item, Self::Error> {
+        let q_in = x.modulus();
+        let delta2k = delta2k.ok_or(GarblerError::DeltaRequired)?;
+        let q_out = delta2k.modulus();
+        // let k_out = delta2k.k();
+        let tao = x.color();
+        let g = tweak(self.current_gate());
+        let Din = self.delta(q_in);
+        let Dout = delta2k.clone();
+
+        let C = Dout
+            .cmul((q_out - ((q_in - tao) % q_in) as crate::mod2k::U) & (q_out - 1))
+            .xor_hash_ofb_back(g, (x.plus(&Din.cmul((q_in - tao) % q_in))).as_block());
+
+        let mut gate = vec![vec![Block::default(); k_out as usize]; q_in as usize - 1];
+
+        let mut A_ = x.clone();
+        for xth in 0..q_in {
+            if xth > 0 {
+                A_.plus_eq(&Din); // avoiding expensive cmul for `A_ = A.plus(&Din.cmul(x))`
+            }
+
+            let ix = (tao as usize + xth as usize) % q_in as usize;
+            if ix == 0 {
+                continue;
+            }
+
+            let C_precomputed = C.plus(&Dout.cmul(xth as crate::mod2k::U));
+            let ct = C_precomputed.xor_hash_ofb_back(g, A_.as_block());
+            gate[ix - 1] = ct.as_blocks();
+        }
+
+        for block in gate.iter().flat_map(|x| x.iter()) {
+            self.channel.write_block(block)?;
+        }
+        Ok(C)
     }
 }
 

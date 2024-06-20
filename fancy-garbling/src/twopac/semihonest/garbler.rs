@@ -1,6 +1,9 @@
 use crate::{
-    errors::TwopacError, wire::WireLabel, AllWire, ArithmeticWire, Fancy, FancyArithmetic,
-    FancyBinary, FancyInput, FancyReveal, Garbler as Gb, WireMod2,
+    errors::TwopacError,
+    mod2k::{Mod2kArithmetic, WireLabelMod2k, WireMod2k},
+    wire::WireLabel,
+    AllWire, ArithmeticWire, Fancy, FancyArithmetic, FancyBinary, FancyInput, FancyReveal,
+    Garbler as Gb, WireMod2,
 };
 use ocelot::ot::Sender as OtSender;
 use rand::{CryptoRng, Rng, SeedableRng};
@@ -185,6 +188,32 @@ impl<C: AbstractChannel, RNG: CryptoRng + Rng, OT, Wire: WireLabel> Fancy
 
     fn output(&mut self, x: &Self::Item) -> Result<Option<u16>, Self::Error> {
         self.garbler.output(x).map_err(Self::Error::from)
+    }
+}
+
+impl<C: AbstractChannel, RNG: CryptoRng + Rng, OT, Wire: WireLabel> Mod2kArithmetic
+    for Garbler<C, RNG, OT, Wire>
+{
+    type Item = WireMod2k;
+    type W = Wire;
+    type Error = TwopacError;
+
+    // fn add(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, Self::Error> {
+    //     self.garbler.add(x, y).map_err(Self::Error::from)
+    // }
+
+    // fn sub(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, Self::Error> {
+    //     self.garbler.sub(x, y).map_err(Self::Error::from)
+    // }
+
+    // fn cmul(&mut self, x: &Self::Item, c: mod2k::U) -> Result<Self::Item, Self::Error> {
+    //     self.garbler.cmul(x, c).map_err(Self::Error::from)
+    // }
+
+    fn mod_qto2k(&mut self, x: &Self::W, delta2k: Option<&Self::Item>, k_out: u16) -> Result<Self::Item, Self::Error> {
+        self.garbler
+            .mod_qto2k(x, delta2k, k_out)
+            .map_err(Self::Error::from)
     }
 }
 

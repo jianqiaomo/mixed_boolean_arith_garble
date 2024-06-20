@@ -1,6 +1,5 @@
 use crate::{
-    errors::TwopacError, wire::WireLabel, AllWire, ArithmeticWire, Evaluator as Ev, Fancy,
-    FancyArithmetic, FancyBinary, FancyInput, FancyReveal, WireMod2,
+    errors::TwopacError, mod2k::{Mod2kArithmetic, WireMod2k}, wire::WireLabel, AllWire, ArithmeticWire, Evaluator as Ev, Fancy, FancyArithmetic, FancyBinary, FancyInput, FancyReveal, WireMod2
 };
 use ocelot::ot::Receiver as OtReceiver;
 use rand::{CryptoRng, Rng};
@@ -165,6 +164,18 @@ impl<C: AbstractChannel, RNG, OT, Wire: WireLabel> Fancy for Evaluator<C, RNG, O
 
     fn output(&mut self, x: &Wire) -> Result<Option<u16>, Self::Error> {
         self.evaluator.output(x).map_err(Self::Error::from)
+    }
+}
+
+impl<C: AbstractChannel, RNG, OT, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, RNG, OT, Wire> {
+    type Item = WireMod2k;
+    type W = Wire;
+    type Error = TwopacError;
+
+    fn mod_qto2k(&mut self, x: &Self::W, delta2k: Option<&Self::Item>, k_out: u16) -> Result<Self::Item, Self::Error> {
+        self.evaluator
+            .mod_qto2k(x, delta2k, k_out)
+            .map_err(Self::Error::from)
     }
 }
 

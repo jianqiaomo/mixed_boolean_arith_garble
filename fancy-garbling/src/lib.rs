@@ -18,4 +18,4 @@ pub mod util;
 mod wire;
 mod mod2k;
 
-pub use crate::{errors::FancyError, fancy::*, garble::*, wire::*};
+pub use crate::{errors::FancyError, fancy::*, garble::*, wire::*, mod2k::*};
