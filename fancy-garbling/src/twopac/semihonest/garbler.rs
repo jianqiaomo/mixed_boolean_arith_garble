@@ -1,6 +1,6 @@
 use crate::{
     errors::TwopacError,
-    mod2k::{Mod2kArithmetic, WireLabelMod2k, WireMod2k},
+    mod2k::{Mod2kArithmetic, WireMod2k},
     wire::WireLabel,
     AllWire, ArithmeticWire, Fancy, FancyArithmetic, FancyBinary, FancyInput, FancyReveal,
     Garbler as Gb, WireMod2,

@@ -592,9 +592,9 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
         let Din = self.delta(q_in);
         let Dout = delta2k.clone();
 
-        let C = Dout
-            .cmul((q_out - ((q_in - tao) % q_in) as crate::mod2k::U) & (q_out - 1))
-            .xor_hash_ofb_back(g, (x.plus(&Din.cmul((q_in - tao) % q_in))).as_block());
+        let C = WireMod2k::zero(k_out)
+            .xor_hash_ofb_back(g, (x.plus(&Din.cmul((q_in - tao) % q_in))).as_block())
+            .plus(&Dout.cmul((q_out - ((q_in - tao) % q_in) as crate::mod2k::U) & (q_out - 1)));
 
         let mut gate = vec![vec![Block::default(); k_out as usize]; q_in as usize - 1];
 
