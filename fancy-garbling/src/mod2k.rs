@@ -81,7 +81,8 @@ pub trait WireLabelMod2k: Clone {
         Self::hash_to_mod(hash)
     }
 
-    /// Compute the hash of this wire mod `2`.
+    /// Convert this wire to mod `2` so that it is one Block size,
+    /// then compute the hash of this wire.
     ///
     /// Uses fixed-key AES.
     #[inline(never)]
@@ -382,10 +383,7 @@ impl WireLabelMod2k for WireMod2k {
 
     fn xor_hash_ofb_back(&self, tweak: Block, wire: Block) -> Self {
         let blocks = self.as_blocks();
-        Self::from_blocks(
-            Self::block_xor_hash_ofb(blocks, tweak, wire),
-            self.k()
-        )
+        Self::from_blocks(Self::block_xor_hash_ofb(blocks, tweak, wire), self.k())
     }
 }
 
@@ -415,7 +413,8 @@ pub trait Mod2kArithmetic {
     /// Resulting wire has modulus `2^k`.
     ///
     /// * `x` - Arithmetic WireModQ (2, 3, or q) wire label.
-    /// * `delta2k` - WireMod 2^k label type delta.
+    /// * `delta2k` - WireMod 2^k label type delta. Ignore for evaluator.
+    /// * `k_out` - The power of 2 of the modulus `2^k`.
     fn mod_qto2k(
         &mut self,
         x: &Self::W,
@@ -428,7 +427,24 @@ pub trait Mod2kArithmetic {
     // /// Link: <https://doi.org/10.1007/978-3-031-58751-1_12>
     // ///
     // /// * `AK` - Arithmetic wire to be decomposed, modulus `2^k`.
-    // fn bit_decomposition(&mut self, AK: &Self::Item) -> Result<Vec<Self::Wire>, Self::Error>;
+    // /// * `delta2k` - WireMod 2^k label type delta. Ignore for evaluator.
+    // fn mod2k_bit_decomposition(
+    //     &mut self,
+    //     AK: &Self::Item,
+    //     delta2k: Option<&Self::Item>,
+    // ) -> Result<Vec<Self::W>, Self::Error>;
+
+    /// Compose WireMod2 into arithmetic wire. Returns wire in mod 2^k.
+    /// It is designed to be used as the mini composition in the mod2k_bit_decomposition.
+    /// Link: <https://doi.org/10.1007/978-3-031-58751-1_12>
+    ///
+    /// * `K_i` - Vector of WireMod2 to be composed into arithmetic wire. There should be `k` elements.
+    /// * `delta2k` - WireMod 2^k label type delta. Ignore for evaluator.
+    fn mod2k_bit_composition(
+        &mut self,
+        K_i: &Vec<&Self::W>,
+        delta2k: Option<&Self::Item>,
+    ) -> Result<Self::Item, Self::Error>;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

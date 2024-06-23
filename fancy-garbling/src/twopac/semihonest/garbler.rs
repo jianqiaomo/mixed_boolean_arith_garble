@@ -167,8 +167,10 @@ impl<C: AbstractChannel, RNG: CryptoRng + Rng, OT, Wire: WireLabel + ArithmeticW
         self.garbler.proj(x, q, tt).map_err(Self::Error::from)
     }
 
-    fn bit_decomposition(&mut self, AK: &Wire) -> Result<Vec<Self::Item>, Self::Error>{
-        self.garbler.bit_decomposition(AK).map_err(Self::Error::from)
+    fn bit_decomposition(&mut self, AK: &Wire) -> Result<Vec<Self::Item>, Self::Error> {
+        self.garbler
+            .bit_decomposition(AK)
+            .map_err(Self::Error::from)
     }
 
     fn bit_composition(&mut self, K_j: &Vec<&Wire>) -> Result<Self::Item, Self::Error> {
@@ -210,9 +212,34 @@ impl<C: AbstractChannel, RNG: CryptoRng + Rng, OT, Wire: WireLabel> Mod2kArithme
     //     self.garbler.cmul(x, c).map_err(Self::Error::from)
     // }
 
-    fn mod_qto2k(&mut self, x: &Self::W, delta2k: Option<&Self::Item>, k_out: u16) -> Result<Self::Item, Self::Error> {
+    fn mod_qto2k(
+        &mut self,
+        x: &Self::W,
+        delta2k: Option<&Self::Item>,
+        k_out: u16,
+    ) -> Result<Self::Item, Self::Error> {
         self.garbler
             .mod_qto2k(x, delta2k, k_out)
+            .map_err(Self::Error::from)
+    }
+
+    // fn mod2k_bit_decomposition(
+    //         &mut self,
+    //         AK: &Self::Item,
+    //         delta2k: Option<&Self::Item>,
+    //     ) -> Result<Vec<Self::W>, Self::Error> {
+    //     self.garbler
+    //         .mod2k_bit_decomposition(AK, delta2k)
+    //         .map_err(Self::Error::from)
+    // }
+
+    fn mod2k_bit_composition(
+        &mut self,
+        K_i: &Vec<&Self::W>,
+        delta2k: Option<&Self::Item>,
+    ) -> Result<Self::Item, Self::Error> {
+        self.garbler
+            .mod2k_bit_composition(K_i, delta2k)
             .map_err(Self::Error::from)
     }
 }

@@ -11,6 +11,7 @@ use rand::{CryptoRng, RngCore};
 use scuttlebutt::{AbstractChannel, Block};
 #[cfg(feature = "serde")]
 use serde::de::DeserializeOwned;
+use serde_json::to_vec;
 use std::collections::HashMap;
 use subtle::ConditionallySelectable;
 
@@ -615,9 +616,92 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
         }
 
         for block in gate.iter().flat_map(|x| x.iter()) {
-            self.channel.write_block(block)?;
+            self.channel.write_block(block)?; // k_out * (q_in - 1) Blocks
         }
         Ok(C)
+    }
+
+    // fn mod2k_bit_decomposition(
+    //     &mut self,
+    //     AK: &Self::Item,
+    //     delta2k: Option<&Self::Item>,
+    // ) -> Result<Vec<Self::W>, Self::Error> {
+    //     let k = AK.k();
+    //     let p = AK.modulus();
+
+    //     let K_i = self
+    //         .encode_many_wires(&vec![0; k as usize], &vec![2; k as usize])?
+    //         .0;
+    //     let A_i = (0..k)
+    //         .map(|i| {
+    //             if i == 0 {
+    //                 AK.clone()
+    //             } else {
+    //                 WireMod2k::rand(&mut self.rng, k - i)
+    //             }
+    //         })
+    //         .collect::<Vec<WireMod2k>>();
+    //     let alpha_i = A_i
+    //         .iter()
+    //         .map(|x| x.color())
+    //         .collect::<Vec<crate::mod2k::U>>();
+
+    //     let gate_num = self.current_gate();
+    //     let mod2k_delta = delta2k.ok_or(GarblerError::DeltaRequired)?;
+    //     let mod2_delta = self.delta(2);
+
+    //     let mut C_i_beta_alpha_i_mod_2 = vec![Block::default(); 2 * k as usize];
+    //     for ith in 0..k {
+    //         for beta in 0..2u16 {
+    //             let left = A_i[ith as usize]
+    //                 .plus(&mod2k_delta.cmul(beta as crate::mod2k::U))
+    //                 .hash(tweak2(gate_num as u64, ith as u64));
+    //             let right = if beta == 0 {
+    //                 K_i[ith as usize].as_block()
+    //             } else {
+    //                 K_i[ith as usize].plus(&mod2_delta).as_block()
+    //             };
+    //             let C_i_idx = ith as usize * 2
+    //                 + (((alpha_i[ith as usize] & 1) as u16 + (beta & 1)) & 1) as usize;
+    //             C_i_beta_alpha_i_mod_2[C_i_idx] = left ^ right;
+    //         }
+    //     }
+
+    //     // send, then mini BC
+    //     todo!("mini BC");
+
+    //     // Ok(())
+    // }
+
+    fn mod2k_bit_composition(
+        &mut self,
+        K_i: &Vec<&Self::W>,
+        delta2k: Option<&Self::Item>,
+    ) -> Result<Self::Item, Self::Error> {
+        debug_assert!(K_i.iter().all(|x| x.modulus() == 2));
+        let A = delta2k.ok_or(GarblerError::DeltaRequired)?; // mod2k_delta (self.delta): A is the delta of output WireMod 2^k
+        let k = K_i.len() as u16; // output WireMod 2^k has k bits
+        if k != A.k() {
+            println!(
+                "for {} bits Boolean labels, the arithmetic label should be mod 2^{} but got {}.",
+                A.k(),
+                A.k(),
+                k
+            );
+            return Err(GarblerError::EncodingError);
+        }
+
+        // mod 2 to 2^k for each bit, then add them for free
+        let B = K_i
+            .iter()
+            .enumerate()
+            .map(|(ith, &mod2wire)| {
+                let delta2k_times_2_pow_i = A.cmul(1 << ith);
+                self.mod_qto2k(mod2wire, Some(&delta2k_times_2_pow_i), k)
+                    .unwrap()
+            })
+            .fold(WireMod2k::zero(k), |acc, mod2kwire| acc.plus(&mod2kwire));
+        Ok(B)
     }
 }
 

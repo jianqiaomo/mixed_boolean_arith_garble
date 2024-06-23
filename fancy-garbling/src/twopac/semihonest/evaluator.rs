@@ -1,5 +1,9 @@
 use crate::{
-    errors::TwopacError, mod2k::{Mod2kArithmetic, WireMod2k}, wire::WireLabel, AllWire, ArithmeticWire, Evaluator as Ev, Fancy, FancyArithmetic, FancyBinary, FancyInput, FancyReveal, WireMod2
+    errors::TwopacError,
+    mod2k::{Mod2kArithmetic, WireMod2k},
+    wire::WireLabel,
+    AllWire, ArithmeticWire, Evaluator as Ev, Fancy, FancyArithmetic, FancyBinary, FancyInput,
+    FancyReveal, WireMod2,
 };
 use ocelot::ot::Receiver as OtReceiver;
 use rand::{CryptoRng, Rng};
@@ -146,11 +150,15 @@ impl<C: AbstractChannel, RNG, OT, Wire: WireLabel + ArithmeticWire> FancyArithme
     }
 
     fn bit_decomposition(&mut self, AK: &Wire) -> Result<Vec<Self::Item>, Self::Error> {
-        self.evaluator.bit_decomposition(AK).map_err(Self::Error::from)
+        self.evaluator
+            .bit_decomposition(AK)
+            .map_err(Self::Error::from)
     }
 
     fn bit_composition(&mut self, K_j: &Vec<&Wire>) -> Result<Self::Item, Self::Error> {
-        self.evaluator.bit_composition(K_j).map_err(Self::Error::from)
+        self.evaluator
+            .bit_composition(K_j)
+            .map_err(Self::Error::from)
     }
 }
 
@@ -172,9 +180,24 @@ impl<C: AbstractChannel, RNG, OT, Wire: WireLabel> Mod2kArithmetic for Evaluator
     type W = Wire;
     type Error = TwopacError;
 
-    fn mod_qto2k(&mut self, x: &Self::W, delta2k: Option<&Self::Item>, k_out: u16) -> Result<Self::Item, Self::Error> {
+    fn mod_qto2k(
+        &mut self,
+        x: &Self::W,
+        delta2k: Option<&Self::Item>,
+        k_out: u16,
+    ) -> Result<Self::Item, Self::Error> {
         self.evaluator
             .mod_qto2k(x, delta2k, k_out)
+            .map_err(Self::Error::from)
+    }
+
+    fn mod2k_bit_composition(
+        &mut self,
+        K_i: &Vec<&Self::W>,
+        delta2k: Option<&Self::Item>,
+    ) -> Result<Self::Item, Self::Error> {
+        self.evaluator
+            .mod2k_bit_composition(K_i, delta2k)
             .map_err(Self::Error::from)
     }
 }

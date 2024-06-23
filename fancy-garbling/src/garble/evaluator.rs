@@ -297,7 +297,12 @@ impl<C: AbstractChannel, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, Wire>
     type W = Wire;
     type Error = EvaluatorError;
 
-    fn mod_qto2k(&mut self, x: &Self::W, _: Option<&Self::Item>, k_out: u16) -> Result<Self::Item, Self::Error> {
+    fn mod_qto2k(
+        &mut self,
+        x: &Self::W,
+        _: Option<&Self::Item>,
+        k_out: u16,
+    ) -> Result<Self::Item, Self::Error> {
         let k = k_out; // let k = delta2k.k();
         let ngates = (x.modulus() - 1) as usize;
         let mut gate = Vec::with_capacity(ngates);
@@ -314,8 +319,25 @@ impl<C: AbstractChannel, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, Wire>
             Ok(WireMod2k::zero(k_out).xor_hash_ofb_back(t, x.as_block())) // Ok(x.hashback(t, q))
         } else {
             let ct = gate[x.color() as usize - 1].clone();
-            Ok(WireMod2k::from_blocks(ct, k_out).xor_hash_ofb_back(t, x.as_block())) // Ok(Wire::from_block(ct ^ x.hash(t), q))
+            Ok(WireMod2k::from_blocks(ct, k_out).xor_hash_ofb_back(t, x.as_block()))
+            // Ok(Wire::from_block(ct ^ x.hash(t), q))
         }
+    }
+
+    fn mod2k_bit_composition(
+        &mut self,
+        K_i: &Vec<&Self::W>,
+        _: Option<&Self::Item>,
+    ) -> Result<Self::Item, Self::Error> {
+        debug_assert!(K_i.iter().all(|x| x.modulus() == 2));
+        let k = K_i.len() as u16; // output WireMod 2^k has k bits
+
+        // mod 2 to 2^k for each bit, then add them for free
+        let L = K_i
+            .iter()
+            .map(|&mod2wire| self.mod_qto2k(mod2wire, None, k).unwrap())
+            .fold(WireMod2k::zero(k), |acc, mod2kwire| acc.plus(&mod2kwire));
+        Ok(L)
     }
 }
 

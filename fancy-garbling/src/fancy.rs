@@ -187,7 +187,7 @@ pub trait FancyArithmetic: Fancy {
     /// Returns a vector of wires Mod2. 
     /// Link: <https://doi.org/10.1007/978-3-031-58751-1_12>
     /// 
-    /// Assume k=1: We haven't supported arithmetic wire label prime p^k. 
+    /// Assume k=1: for other k, use WireMod2k in mod mod2k instead. 
     /// It requires wire label size to be k*Block instead of Block. 
     /// 
     /// * `AK` - Arithmetic wire to be decomposed, modulus must be prime p.
@@ -197,7 +197,7 @@ pub trait FancyArithmetic: Fancy {
     /// Returns wire in mod p^1. 
     /// Link: <https://doi.org/10.1007/978-3-031-58751-1_12>
     /// 
-    /// Assume k=1: We haven't supported arithmetic wire label prime p^k. 
+    /// Assume k=1: for other k, use WireMod2k in mod mod2k instead.
     /// It requires wire label size to be k*Block instead of Block. 
     /// 
     /// * `K_j` - Vector of WireMod2 to be composed into arithmetic wire.
