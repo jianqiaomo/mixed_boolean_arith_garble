@@ -200,6 +200,16 @@ impl<C: AbstractChannel, RNG, OT, Wire: WireLabel> Mod2kArithmetic for Evaluator
             .mod2k_bit_composition(K_i, delta2k)
             .map_err(Self::Error::from)
     }
+
+    fn mod2k_bit_decomposition(
+        &mut self,
+        AK: &Self::Item,
+        delta2k: Option<&Self::Item>,
+    ) -> Result<Vec<Self::W>, Self::Error> {
+        self.evaluator
+            .mod2k_bit_decomposition(AK, delta2k)
+            .map_err(Self::Error::from)
+    }
 }
 
 impl<C: AbstractChannel, RNG: CryptoRng + Rng, OT, Wire: WireLabel> FancyReveal

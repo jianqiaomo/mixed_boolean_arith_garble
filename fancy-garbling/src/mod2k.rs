@@ -140,6 +140,9 @@ pub trait WireLabelMod2k: Clone {
         self
     }
 
+    /// Compute self % `2^k`, returning a new wire.
+    fn modulo_2k(&self, k: u16) -> Self;
+
     /// Self OFB_XOR Hash(tweak, wire):
     /// Original hash encryption of the WireModQ is XORed with the WireModQ.
     /// Here we extend the XOR operation to the WireMod2^k in OFB mode.
@@ -181,6 +184,17 @@ pub trait WireLabelMod2k: Clone {
 }
 
 impl WireMod2k {
+    /// Create a new `mod-2^k` wire with the given `k` and digits.
+    pub fn new(k: u16, ds: Vec<U>) -> Self {
+        if k < 1 || k >= K_MAX {
+            panic!(
+                "[WireModpk::new] 2's power k = {} must be [1, 128).",
+                k
+            )
+        }
+        Self { k, ds }
+    }
+
     // trait HasModulus return u16 which is not enough for 2^k moduli.
     /// Get the modulus of the wire.
     pub fn modulus(&self) -> U {
@@ -273,6 +287,18 @@ impl WireLabelMod2k for WireMod2k {
             k,
             ds: vec![0; util::digits_per_u128(2)],
         }
+    }
+
+    fn modulo_2k(&self, k: u16) -> Self {
+        if k < 1 || k >= K_MAX {
+            panic!(
+                "[WireModpk::modulo_2k] 2's power k = {} must be [1, 128).",
+                k
+            );
+        }
+        let mask = (1 << k) - 1;
+        let ds = self.digits().iter().map(|&d| d & mask).collect();
+        Self { k, ds }
     }
 
     fn as_blocks(&self) -> Vec<Block> {
@@ -422,17 +448,17 @@ pub trait Mod2kArithmetic {
         k_out: u16,
     ) -> Result<Self::Item, Self::Error>;
 
-    // /// Decompose arithmetic wire mod `2^k` AK into bits.
-    // /// Returns a vector of wires Mod2.
-    // /// Link: <https://doi.org/10.1007/978-3-031-58751-1_12>
-    // ///
-    // /// * `AK` - Arithmetic wire to be decomposed, modulus `2^k`.
-    // /// * `delta2k` - WireMod 2^k label type delta. Ignore for evaluator.
-    // fn mod2k_bit_decomposition(
-    //     &mut self,
-    //     AK: &Self::Item,
-    //     delta2k: Option<&Self::Item>,
-    // ) -> Result<Vec<Self::W>, Self::Error>;
+    /// Decompose arithmetic wire mod `2^k` AK into bits.
+    /// Returns a vector of wires Mod2.
+    /// Link: <https://doi.org/10.1007/978-3-031-58751-1_12>
+    ///
+    /// * `AK` - Arithmetic wire to be decomposed, modulus `2^k`.
+    /// * `delta2k` - WireMod 2^k label type delta. Ignore for evaluator.
+    fn mod2k_bit_decomposition(
+        &mut self,
+        AK: &Self::Item,
+        delta2k: Option<&Self::Item>,
+    ) -> Result<Vec<Self::W>, Self::Error>;
 
     /// Compose WireMod2 into arithmetic wire. Returns wire in mod 2^k.
     /// It is designed to be used as the mini composition in the mod2k_bit_decomposition.

@@ -339,6 +339,42 @@ impl<C: AbstractChannel, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, Wire>
             .fold(WireMod2k::zero(k), |acc, mod2kwire| acc.plus(&mod2kwire));
         Ok(L)
     }
+
+    fn mod2k_bit_decomposition(
+        &mut self,
+        AK: &Self::Item,
+        _: Option<&Self::Item>,
+    ) -> Result<Vec<Self::W>, Self::Error> {
+        let k = AK.k();
+        let gate_num = self.current_gate();
+
+        let mut L_i = AK.clone(); // initial: L^(0)
+        let mut lower_l = Vec::with_capacity(k as usize);
+        for ith in 0..k {
+            let Tab_C_i = (0..2)
+                .map(|_| self.channel.read_block())
+                .collect::<Result<Vec<Block>, _>>()?;
+            let x_bar = L_i.color();
+            let right = Tab_C_i[(x_bar & 1) as usize];
+            let left = L_i.hash(tweak2(gate_num as u64, ith as u64));
+            let lower_l_i = Wire::from_block(left ^ right, 2);
+
+            // miniBC: use K_i[ith] and mod_qto2k to reconstruct D^(i) or L^(i+1)
+            if ith < k - 1 {
+                let D_i = self.mod_qto2k(&lower_l_i, None, k - ith).unwrap();
+                // L^(i+1) = (L^(i) - D^(i)) % 2^{k-i} / 2
+                let temp_L_i_next = L_i.minus(&D_i);
+                L_i = WireMod2k::new(
+                    k - (ith + 1),
+                    temp_L_i_next.digits().iter().map(|x| x / 2).collect(),
+                );
+            }
+
+            lower_l.push(lower_l_i);
+        }
+
+        Ok(lower_l)
+    }
 }
 
 impl<C: AbstractChannel, Wire: WireLabel> Fancy for Evaluator<C, Wire> {
