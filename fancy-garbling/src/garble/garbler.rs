@@ -622,18 +622,20 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
     fn mod2k_bit_decomposition(
         &mut self,
         AK: &Self::ItemMod2k,
+        end: Option<u16>,
     ) -> Result<Vec<Self::W>, Self::ErrorMod2k> {
         let k = AK.k();
         let gate_num = self.current_gate();
         let mod2k_delta = self.delta2k(k);
         let mod2_delta = self.delta(2);
+        let end = std::cmp::min(end.unwrap_or(k), k);
 
         let K_i = self
-            .encode_many_wires(&vec![0; k as usize], &vec![2; k as usize])?
+            .encode_many_wires(&vec![0; end as usize], &vec![2; end as usize])?
             .0;
 
         let mut A_i = AK.clone(); // initial: A^(0)
-        for ith in 0..k {
+        for ith in 0..end {
             // Compute and send: C_{i, (beta + alpha^(i)) % 2}
             let mut C_i_beta_alpha_i_mod_2 = vec![Block::default(); 2];
             for beta in 0..2u16 {
@@ -657,7 +659,7 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
             }
 
             // miniBC: use K_i[ith] and mod_qto2k for sampling DK^(i) or A^(i+1)
-            if ith < k - 1 {
+            if ith < end - 1 {
                 let mod2k_delta_i = mod2k_delta.mask_2k(k - ith); // delta2k % 2^(k-i)
                 let DK_i_beta0 = self
                     .mod_qto2k(&K_i[ith as usize], Option::from(&mod2k_delta_i), k - ith)

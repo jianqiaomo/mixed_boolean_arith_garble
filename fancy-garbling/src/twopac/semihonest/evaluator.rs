@@ -203,9 +203,10 @@ impl<C: AbstractChannel, RNG, OT, Wire: WireLabel> Mod2kArithmetic for Evaluator
     fn mod2k_bit_decomposition(
         &mut self,
         AK: &Self::ItemMod2k,
+        end: Option<u16>,
     ) -> Result<Vec<Self::W>, Self::ErrorMod2k> {
         self.evaluator
-            .mod2k_bit_decomposition(AK)
+            .mod2k_bit_decomposition(AK, end)
             .map_err(Self::ErrorMod2k::from)
     }
 }

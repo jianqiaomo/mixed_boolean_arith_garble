@@ -182,6 +182,9 @@ pub trait WireLabelMod2k: Clone {
             })
             .collect::<Vec<Block>>()
     }
+
+    /// Get k of the modulus 2^k.
+    fn k(&self) -> u16;
 }
 
 impl WireMod2k {
@@ -204,11 +207,6 @@ impl WireMod2k {
         } else {
             1 << self.k
         }
-    }
-
-    /// Get k of the modulus 2^k.
-    pub fn k(&self) -> u16 {
-        self.k
     }
 }
 
@@ -289,10 +287,7 @@ impl WireLabelMod2k for WireMod2k {
 
     fn mask_2k(&self, k: u16) -> Self {
         if k < 1 || k >= K_MAX {
-            panic!(
-                "[WireModpk::mask_2k] 2's power k = {} must be [1, 128).",
-                k
-            );
+            panic!("[WireModpk::mask_2k] 2's power k = {} must be [1, 128).", k);
         }
         let mask = (1 << k) - 1;
         let ds = self.digits().iter().map(|&d| d & mask).collect();
@@ -409,6 +404,10 @@ impl WireLabelMod2k for WireMod2k {
         let blocks = self.as_blocks();
         Self::from_blocks(Self::block_xor_hash_ofb(blocks, tweak, wire), self.k())
     }
+
+    fn k(&self) -> u16 {
+        self.k
+    }
 }
 
 /// WireMod2^k arithmetic computation.
@@ -426,7 +425,7 @@ pub trait Mod2kArithmetic {
 
     /// Modulus change: Project a size of one Block, WireModQ label type `x`.
     /// Resulting wire has modulus `2^k`.
-    /// 
+    ///
     /// `delta2k` is only required as miniBC, because the miniBC in Z_p^k Bit-Decomposition Gadget
     /// shares the delta mod 2^(k-i) in 0..k-1. We should not use the different / new delta2k in
     /// the Bit-Decomposition miniBC chain operations.
@@ -447,10 +446,11 @@ pub trait Mod2kArithmetic {
     /// Link: <https://doi.org/10.1007/978-3-031-58751-1_12>
     ///
     /// * `AK` - Arithmetic wire to be decomposed, modulus `2^k`.
-    /// * `rg` - Range of bits to be decomposed. Default is all bits.
+    /// * `end` - End index. Range of bits to be decomposed. Default is all bits. Can be used as `X mod 2^end`.
     fn mod2k_bit_decomposition(
         &mut self,
         AK: &Self::ItemMod2k,
+        end: Option<u16>,
     ) -> Result<Vec<Self::W>, Self::ErrorMod2k>;
 
     /// Compose WireMod2 into arithmetic wire. Returns wire in mod 2^k.
@@ -462,6 +462,30 @@ pub trait Mod2kArithmetic {
         &mut self,
         K_i: &Vec<&Self::W>,
     ) -> Result<Self::ItemMod2k, Self::ErrorMod2k>;
+
+    // /// Compute `div*_{N}(x)` in <https://doi.org/10.1007/978-3-031-58751-1_12>.
+    // /// Not a free operation.
+    // ///
+    // /// div: ⌊x/N⌋ can be represented as ⌊(mx) % 2^(2k+1) / 2^(k+k_E)⌋ for x < 2^k.
+    // ///
+    // /// * `x` - The dividend.
+    // /// * `N` - The divisor.
+    // fn cdiv(&mut self, x: &Self::ItemMod2k, N: U) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
+    //     let num_bits = |value: u128| -> u16 {
+    //         if value == 0 {
+    //             return 0;
+    //         }
+    //         (128 - value.leading_zeros()) as u16
+    //     };
+    //     let k = x.k();
+    //     let k_E = num_bits(N);
+    //     let m = (1 << (k + k_E) as U + N - 1) / N; // m = ceil(2^(k+k_E) / N), m >= 2^k
+    //     let mx = x.cmul(m).mask_2k(2 * k + 1);
+    //     let mx_bits = self.mod2k_bit_decomposition(&mx)?;
+    //     let mx_bits_div_2_k_k_E = mx_bits.iter().skip((k + k_E) as usize).collect_vec();
+    //     let r = self.mod2k_bit_composition(&mx_bits_div_2_k_k_E)?;
+    //     Ok(r)
+    // }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

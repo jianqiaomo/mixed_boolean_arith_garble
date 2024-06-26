@@ -342,13 +342,15 @@ impl<C: AbstractChannel, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, Wire>
     fn mod2k_bit_decomposition(
         &mut self,
         AK: &Self::ItemMod2k,
+        end: Option<u16>,
     ) -> Result<Vec<Self::W>, Self::ErrorMod2k> {
         let k = AK.k();
         let gate_num = self.current_gate();
+        let end = std::cmp::min(end.unwrap_or(k), k);
 
         let mut L_i = AK.clone(); // initial: L^(0)
-        let mut lower_l = Vec::with_capacity(k as usize);
-        for ith in 0..k {
+        let mut lower_l = Vec::with_capacity(end as usize);
+        for ith in 0..end {
             let Tab_C_i = (0..2)
                 .map(|_| self.channel.read_block())
                 .collect::<Result<Vec<Block>, _>>()?;
@@ -358,7 +360,7 @@ impl<C: AbstractChannel, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, Wire>
             let lower_l_i = Wire::from_block(left ^ right, 2);
 
             // miniBC: use K_i[ith] and mod_qto2k to reconstruct D^(i) or L^(i+1)
-            if ith < k - 1 {
+            if ith < end - 1 {
                 let D_i = self.mod_qto2k(&lower_l_i, None, k - ith).unwrap();
                 // L^(i+1) = (L^(i) - D^(i)) % 2^{k-i} / 2
                 let temp_L_i_next = L_i.minus(&D_i);
@@ -370,7 +372,6 @@ impl<C: AbstractChannel, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, Wire>
 
             lower_l.push(lower_l_i);
         }
-
         Ok(lower_l)
     }
 }
