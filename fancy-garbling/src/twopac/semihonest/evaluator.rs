@@ -176,39 +176,37 @@ impl<C: AbstractChannel, RNG, OT, Wire: WireLabel> Fancy for Evaluator<C, RNG, O
 }
 
 impl<C: AbstractChannel, RNG, OT, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, RNG, OT, Wire> {
-    type Item = WireMod2k;
+    type ItemMod2k = WireMod2k;
     type W = Wire;
-    type Error = TwopacError;
+    type ErrorMod2k = TwopacError;
 
     fn mod_qto2k(
         &mut self,
         x: &Self::W,
-        delta2k: Option<&Self::Item>,
+        delta2k: Option<&Self::ItemMod2k>,
         k_out: u16,
-    ) -> Result<Self::Item, Self::Error> {
+    ) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
         self.evaluator
             .mod_qto2k(x, delta2k, k_out)
-            .map_err(Self::Error::from)
+            .map_err(Self::ErrorMod2k::from)
     }
 
     fn mod2k_bit_composition(
         &mut self,
         K_i: &Vec<&Self::W>,
-        delta2k: Option<&Self::Item>,
-    ) -> Result<Self::Item, Self::Error> {
+    ) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
         self.evaluator
-            .mod2k_bit_composition(K_i, delta2k)
-            .map_err(Self::Error::from)
+            .mod2k_bit_composition(K_i)
+            .map_err(Self::ErrorMod2k::from)
     }
 
     fn mod2k_bit_decomposition(
         &mut self,
-        AK: &Self::Item,
-        delta2k: Option<&Self::Item>,
-    ) -> Result<Vec<Self::W>, Self::Error> {
+        AK: &Self::ItemMod2k,
+    ) -> Result<Vec<Self::W>, Self::ErrorMod2k> {
         self.evaluator
-            .mod2k_bit_decomposition(AK, delta2k)
-            .map_err(Self::Error::from)
+            .mod2k_bit_decomposition(AK)
+            .map_err(Self::ErrorMod2k::from)
     }
 }
 

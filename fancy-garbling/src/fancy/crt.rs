@@ -4,7 +4,7 @@ use super::{bundle::ArithmeticBundleGadgets, HasModulus};
 use crate::{
     errors::FancyError,
     fancy::bundle::{Bundle, BundleGadgets},
-    util, FancyArithmetic, FancyBinary,
+    util, FancyArithmetic, FancyBinary, Mod2kArithmetic,
 };
 use itertools::Itertools;
 use std::ops::Deref;
@@ -470,6 +470,35 @@ pub trait CrtGadgets:
 
         Ok(quotient)
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Mixed arithmetic and boolean GC, including their label transformations.
+impl<F: Mod2kArithmetic + CrtGadgets> MixCrtBinaryGadgets for F {}
+
+/// Extension trait for CRT and Binary transformations.
+pub trait MixCrtBinaryGadgets: Mod2kArithmetic + CrtGadgets {
+    // /// Decompose CRT arithmetic wire into binary.
+    // /// Link: <https://doi.org/10.1007/978-3-031-58751-1_12>
+    // fn crt_bit_decomposition(
+    //     &mut self,
+    //     x: &CrtBundle<Self::W>,
+    // ) -> Result<BinaryBundle<Self::W>, Self::ErrorMod2k> {
+    //     let ps = x.moduli();
+    //     let (c_i, k_bits) = util::crt_inv_constants(&ps);
+    //     let x_2k_c_i_sum = x
+    //         .iter()
+    //         .zip(c_i.iter())
+    //         .map(|(x_i, &c)| {
+    //             let x_2k = self.mod_qto2k(x_i, None, k_bits).unwrap();
+    //             x_2k.cmul(c).modulo_2k(k_bits)
+    //         })
+    //         .fold(Self::ItemMod2k::zero(k_bits), |acc, x| {
+    //             acc.plus(&x).modulo_2k(k_bits)
+    //         });
+    //     let r = self.mod2k_bit_decomposition(&x_2k_c_i_sum)?;
+    //     Ok(BinaryBundle::new(r))
+    // }
 }
 
 /// Compute the `ms` needed for the number of CRT primes in `x`, with accuracy

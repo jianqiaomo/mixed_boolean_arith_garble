@@ -268,6 +268,38 @@ pub fn crt_inv_factor(xs: &[u16], q: u128) -> u128 {
     crt_inv(xs, &factor(q))
 }
 
+/// Get the constants `c_i` list for the CRT inversion, as the
+/// original `value = Σ (c_i * x_i) mod N`.
+/// And determine how many bits are needed to represent the max value.
+///
+/// Ref: <https://www.ctfrecipes.com/cryptography/general-knowledge/maths/modular-arithmetic/chinese-remainder-theorem>,
+/// <https://doi.org/10.1007/978-3-031-58751-1_12>.
+pub fn crt_inv_constants(ps: &[u16]) -> (Vec<u128>, u16) {
+    if !ps.iter().all(|&p| PRIMES.contains(&p)) {
+        panic!(
+            "util: CRT supports for prime in the PRIMES list, but got {:?}",
+            ps
+        );
+    }
+    let N = ps.iter().fold(1, |acc, &x| x as i128 * acc);
+    let bits_required = |value: u128| -> u16 {
+        if value == 0 {
+            return 0;
+        }
+        (128 - value.leading_zeros()) as u16
+    };
+    (
+        ps.iter()
+            .map(|&p| {
+                let p = p as i128;
+                let E_i = N / p;
+                E_i as u128 * inv(E_i, p) as u128
+            })
+            .collect::<Vec<u128>>(),
+        bits_required(N as u128),
+    )
+}
+
 /// Invert inp_a mod inp_b.
 pub fn inv(inp_a: i128, inp_b: i128) -> i128 {
     let mut a = inp_a;

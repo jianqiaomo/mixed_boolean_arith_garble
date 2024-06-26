@@ -293,16 +293,16 @@ impl<C: AbstractChannel, Wire: WireLabel + ArithmeticWire> FancyArithmetic for E
 }
 
 impl<C: AbstractChannel, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, Wire> {
-    type Item = WireMod2k;
+    type ItemMod2k = WireMod2k;
     type W = Wire;
-    type Error = EvaluatorError;
+    type ErrorMod2k = EvaluatorError;
 
     fn mod_qto2k(
         &mut self,
         x: &Self::W,
-        _: Option<&Self::Item>,
+        _: Option<&Self::ItemMod2k>,
         k_out: u16,
-    ) -> Result<Self::Item, Self::Error> {
+    ) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
         let k = k_out; // let k = delta2k.k();
         let ngates = (x.modulus() - 1) as usize;
         let mut gate = Vec::with_capacity(ngates);
@@ -327,8 +327,7 @@ impl<C: AbstractChannel, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, Wire>
     fn mod2k_bit_composition(
         &mut self,
         K_i: &Vec<&Self::W>,
-        _: Option<&Self::Item>,
-    ) -> Result<Self::Item, Self::Error> {
+    ) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
         debug_assert!(K_i.iter().all(|x| x.modulus() == 2));
         let k = K_i.len() as u16; // output WireMod 2^k has k bits
 
@@ -342,9 +341,8 @@ impl<C: AbstractChannel, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, Wire>
 
     fn mod2k_bit_decomposition(
         &mut self,
-        AK: &Self::Item,
-        _: Option<&Self::Item>,
-    ) -> Result<Vec<Self::W>, Self::Error> {
+        AK: &Self::ItemMod2k,
+    ) -> Result<Vec<Self::W>, Self::ErrorMod2k> {
         let k = AK.k();
         let gate_num = self.current_gate();
 

@@ -140,8 +140,9 @@ pub trait WireLabelMod2k: Clone {
         self
     }
 
-    /// Compute self % `2^k`, returning a new wire.
-    fn modulo_2k(&self, k: u16) -> Self;
+    /// Compute label % `2^k`, returning a new wire.
+    /// Note: this is not computing modulo of the original value.
+    fn mask_2k(&self, k: u16) -> Self;
 
     /// Self OFB_XOR Hash(tweak, wire):
     /// Original hash encryption of the WireModQ is XORed with the WireModQ.
@@ -187,10 +188,7 @@ impl WireMod2k {
     /// Create a new `mod-2^k` wire with the given `k` and digits.
     pub fn new(k: u16, ds: Vec<U>) -> Self {
         if k < 1 || k >= K_MAX {
-            panic!(
-                "[WireModpk::new] 2's power k = {} must be [1, 128).",
-                k
-            )
+            panic!("[WireModpk::new] 2's power k = {} must be [1, 128).", k)
         }
         Self { k, ds }
     }
@@ -251,7 +249,7 @@ impl WireLabelMod2k for WireMod2k {
         // Assuming modulus has to be the same here
         // Will enforce by type system
         //debug_assert_eq!(, ymod);
-        debug_assert_eq!(xs.len(), ys.len());
+        debug_assert_eq!(self.k, other.k); // debug_assert_eq!(xs.len(), ys.len());
         xs.iter_mut().zip(ys.iter()).for_each(|(x, &y)| {
             let (zp, overflow) = (*x + y).overflowing_sub(q);
             *x = if overflow { *x + y } else { zp }
@@ -289,10 +287,10 @@ impl WireLabelMod2k for WireMod2k {
         }
     }
 
-    fn modulo_2k(&self, k: u16) -> Self {
+    fn mask_2k(&self, k: u16) -> Self {
         if k < 1 || k >= K_MAX {
             panic!(
-                "[WireModpk::modulo_2k] 2's power k = {} must be [1, 128).",
+                "[WireModpk::mask_2k] 2's power k = {} must be [1, 128).",
                 k
             );
         }
@@ -418,59 +416,52 @@ impl WireLabelMod2k for WireMod2k {
 /// <https://doi.org/10.1007/978-3-031-58751-1_12>.
 pub trait Mod2kArithmetic {
     /// The underlying wire datatype created by an object implementing WireMod2^k.
-    type Item: WireLabelMod2k;
+    type ItemMod2k: WireLabelMod2k;
 
     /// Errors which may be thrown by the users of Fancy.
-    type Error: std::fmt::Debug + std::fmt::Display + std::convert::From<FancyError>;
+    type ErrorMod2k: std::fmt::Debug + std::fmt::Display + std::convert::From<FancyError>;
 
     /// WireModQ label type, which is size of one Block.
     type W: Clone + HasModulus;
 
-    // /// Add `x` and `y`.
-    // fn add(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, Self::Error>;
-
-    // /// Subtract `x` and `y`.
-    // fn sub(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, Self::Error>;
-
-    // /// Multiply `x` times the constant `c`.
-    // fn cmul(&mut self, x: &Self::Item, c: U) -> Result<Self::Item, Self::Error>;
-
     /// Modulus change: Project a size of one Block, WireModQ label type `x`.
     /// Resulting wire has modulus `2^k`.
+    /// 
+    /// `delta2k` is only required as miniBC, because the miniBC in Z_p^k Bit-Decomposition Gadget
+    /// shares the delta mod 2^(k-i) in 0..k-1. We should not use the different / new delta2k in
+    /// the Bit-Decomposition miniBC chain operations.
     ///
     /// * `x` - Arithmetic WireModQ (2, 3, or q) wire label.
-    /// * `delta2k` - WireMod 2^k label type delta. Ignore for evaluator.
+    /// * `delta2k` - (Only required as miniBC) WireMod 2^k label type delta. Ignore for evaluator. Ignore
+    /// for general proj q to 2^k.
     /// * `k_out` - The power of 2 of the modulus `2^k`.
     fn mod_qto2k(
         &mut self,
         x: &Self::W,
-        delta2k: Option<&Self::Item>,
+        delta2k: Option<&Self::ItemMod2k>,
         k_out: u16,
-    ) -> Result<Self::Item, Self::Error>;
+    ) -> Result<Self::ItemMod2k, Self::ErrorMod2k>;
 
     /// Decompose arithmetic wire mod `2^k` AK into bits.
     /// Returns a vector of wires Mod2.
     /// Link: <https://doi.org/10.1007/978-3-031-58751-1_12>
     ///
     /// * `AK` - Arithmetic wire to be decomposed, modulus `2^k`.
-    /// * `delta2k` - WireMod 2^k label type delta. Ignore for evaluator.
+    /// * `rg` - Range of bits to be decomposed. Default is all bits.
     fn mod2k_bit_decomposition(
         &mut self,
-        AK: &Self::Item,
-        delta2k: Option<&Self::Item>,
-    ) -> Result<Vec<Self::W>, Self::Error>;
+        AK: &Self::ItemMod2k,
+    ) -> Result<Vec<Self::W>, Self::ErrorMod2k>;
 
     /// Compose WireMod2 into arithmetic wire. Returns wire in mod 2^k.
     /// It is designed to be used as the mini composition in the mod2k_bit_decomposition.
     /// Link: <https://doi.org/10.1007/978-3-031-58751-1_12>
     ///
     /// * `K_i` - Vector of WireMod2 to be composed into arithmetic wire. There should be `k` elements.
-    /// * `delta2k` - WireMod 2^k label type delta. Ignore for evaluator.
     fn mod2k_bit_composition(
         &mut self,
         K_i: &Vec<&Self::W>,
-        delta2k: Option<&Self::Item>,
-    ) -> Result<Self::Item, Self::Error>;
+    ) -> Result<Self::ItemMod2k, Self::ErrorMod2k>;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

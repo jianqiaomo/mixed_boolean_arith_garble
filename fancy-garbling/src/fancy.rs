@@ -13,7 +13,7 @@ mod input;
 mod reveal;
 pub use binary::{BinaryBundle, BinaryGadgets};
 pub use bundle::{ArithmeticBundleGadgets, BinaryBundleGadgets, Bundle, BundleGadgets};
-pub use crt::{CrtBundle, CrtGadgets};
+pub use crt::{CrtBundle, CrtGadgets, MixCrtBinaryGadgets};
 pub use input::FancyInput;
 pub use reveal::FancyReveal;
 

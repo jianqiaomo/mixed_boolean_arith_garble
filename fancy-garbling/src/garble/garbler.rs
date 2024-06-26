@@ -23,6 +23,7 @@ pub struct Garbler<C, RNG, Wire> {
     current_output: usize,
     current_gate: usize,
     rng: RNG,
+    deltas2k: HashMap<u16, WireMod2k>, // delta of Wire mod 2^k, mapping from k to delta
 }
 
 #[cfg(feature = "serde")]
@@ -48,6 +49,7 @@ impl<C: AbstractChannel, RNG: CryptoRng + RngCore, Wire: WireLabel> Garbler<C, R
             current_gate: 0,
             current_output: 0,
             rng,
+            deltas2k: HashMap::new(),
         }
     }
 
@@ -66,6 +68,17 @@ impl<C: AbstractChannel, RNG: CryptoRng + RngCore, Wire: WireLabel> Garbler<C, R
         }
         let w = Wire::rand_delta(&mut self.rng, q);
         self.deltas.insert(q, w.clone());
+        w
+    }
+
+    /// Create a delta of Wire mod `2^k` if it has not been created yet for this modulus, otherwise just
+    /// return the existing one.
+    pub fn delta2k(&mut self, k: u16) -> WireMod2k {
+        if let Some(delta) = self.deltas2k.get(&k) {
+            return delta.clone();
+        }
+        let w = WireMod2k::rand_delta(&mut self.rng, k);
+        self.deltas2k.insert(k, w.clone());
         w
     }
 
@@ -555,18 +568,22 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel + ArithmeticW
 impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithmetic
     for Garbler<C, RNG, Wire>
 {
-    type Item = WireMod2k;
+    type ItemMod2k = WireMod2k;
     type W = Wire;
-    type Error = GarblerError;
+    type ErrorMod2k = GarblerError;
 
     fn mod_qto2k(
         &mut self,
         x: &Self::W,
-        delta2k: Option<&Self::Item>,
+        delta2k: Option<&Self::ItemMod2k>,
         k_out: u16,
-    ) -> Result<Self::Item, Self::Error> {
+    ) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
         let q_in = x.modulus();
-        let delta2k = delta2k.ok_or(GarblerError::DeltaRequired)?;
+        let mut potential_delta2k = vec![WireMod2k::zero(k_out)]; // used to store a created delta2k when no delta2k is provided
+        let delta2k = delta2k.unwrap_or({
+            potential_delta2k[0] = self.delta2k(k_out);
+            &potential_delta2k[0]
+        });
         let q_out = delta2k.modulus();
         // let k_out = delta2k.k();
         let tao = x.color();
@@ -604,12 +621,11 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
 
     fn mod2k_bit_decomposition(
         &mut self,
-        AK: &Self::Item,
-        delta2k: Option<&Self::Item>,
-    ) -> Result<Vec<Self::W>, Self::Error> {
+        AK: &Self::ItemMod2k,
+    ) -> Result<Vec<Self::W>, Self::ErrorMod2k> {
         let k = AK.k();
         let gate_num = self.current_gate();
-        let mod2k_delta = delta2k.ok_or(GarblerError::DeltaRequired)?;
+        let mod2k_delta = self.delta2k(k);
         let mod2_delta = self.delta(2);
 
         let K_i = self
@@ -624,7 +640,7 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
                 let A_i_plus_beta_delta = if beta == 0 {
                     A_i.clone()
                 } else {
-                    A_i.plus(&mod2k_delta).clone()
+                    A_i.plus(&mod2k_delta.mask_2k(k - ith)).clone()
                 };
                 let left = A_i_plus_beta_delta.hash(tweak2(gate_num as u64, ith as u64));
                 let right = if beta == 0 {
@@ -642,7 +658,7 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
 
             // miniBC: use K_i[ith] and mod_qto2k for sampling DK^(i) or A^(i+1)
             if ith < k - 1 {
-                let mod2k_delta_i = mod2k_delta.modulo_2k(k - ith); // delta2k % 2^(k-i)
+                let mod2k_delta_i = mod2k_delta.mask_2k(k - ith); // delta2k % 2^(k-i)
                 let DK_i_beta0 = self
                     .mod_qto2k(&K_i[ith as usize], Option::from(&mod2k_delta_i), k - ith)
                     .unwrap();
@@ -660,20 +676,10 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
     fn mod2k_bit_composition(
         &mut self,
         K_i: &Vec<&Self::W>,
-        delta2k: Option<&Self::Item>,
-    ) -> Result<Self::Item, Self::Error> {
+    ) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
         debug_assert!(K_i.iter().all(|x| x.modulus() == 2));
-        let A = delta2k.ok_or(GarblerError::DeltaRequired)?; // mod2k_delta (self.delta): A is the delta of output WireMod 2^k
         let k = K_i.len() as u16; // output WireMod 2^k has k bits
-        if k != A.k() {
-            println!(
-                "for {} bits Boolean labels, the arithmetic label should be mod 2^{} but got {}.",
-                A.k(),
-                A.k(),
-                k
-            );
-            return Err(GarblerError::EncodingError);
-        }
+        let A = self.delta2k(k); // mod2k_delta (self.delta): A is the delta of output WireMod 2^k
 
         // mod 2 to 2^k for each bit, then add them for free
         let B = K_i
