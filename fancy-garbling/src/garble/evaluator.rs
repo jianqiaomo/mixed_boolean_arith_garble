@@ -327,13 +327,15 @@ impl<C: AbstractChannel, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, Wire>
     fn mod2k_bit_composition(
         &mut self,
         K_i: &Vec<&Self::W>,
+        k: Option<u16>,
     ) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
         debug_assert!(K_i.iter().all(|x| x.modulus() == 2));
-        let k = K_i.len() as u16; // output WireMod 2^k has k bits
+        let k = k.unwrap_or(K_i.len() as u16); // output WireMod 2^k from k bits
 
         // mod 2 to 2^k for each bit, then add them for free
         let L = K_i
             .iter()
+            .take(k as usize)
             .map(|&mod2wire| self.mod_qto2k(mod2wire, None, k).unwrap())
             .fold(WireMod2k::zero(k), |acc, mod2kwire| acc.plus(&mod2kwire));
         Ok(L)

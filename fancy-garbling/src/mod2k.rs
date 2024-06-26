@@ -426,12 +426,12 @@ pub trait Mod2kArithmetic {
     /// Modulus change: Project a size of one Block, WireModQ label type `x`.
     /// Resulting wire has modulus `2^k`.
     ///
-    /// `delta2k` is only required as miniBC, because the miniBC in Z_p^k Bit-Decomposition Gadget
+    /// `delta2k` is only required in bit composition, because the (mini)BC in Z_p^k Bit-Decomposition Gadget
     /// shares the delta mod 2^(k-i) in 0..k-1. We should not use the different / new delta2k in
-    /// the Bit-Decomposition miniBC chain operations.
+    /// the bit composition chain operations.
     ///
     /// * `x` - Arithmetic WireModQ (2, 3, or q) wire label.
-    /// * `delta2k` - (Only required as miniBC) WireMod 2^k label type delta. Ignore for evaluator. Ignore
+    /// * `delta2k` - (Only required in BC) WireMod 2^k label type delta. Ignore for evaluator. Ignore
     /// for general proj q to 2^k.
     /// * `k_out` - The power of 2 of the modulus `2^k`.
     fn mod_qto2k(
@@ -454,13 +454,14 @@ pub trait Mod2kArithmetic {
     ) -> Result<Vec<Self::W>, Self::ErrorMod2k>;
 
     /// Compose WireMod2 into arithmetic wire. Returns wire in mod 2^k.
-    /// It is designed to be used as the mini composition in the mod2k_bit_decomposition.
     /// Link: <https://doi.org/10.1007/978-3-031-58751-1_12>
     ///
     /// * `K_i` - Vector of WireMod2 to be composed into arithmetic wire. There should be `k` elements.
+    /// * `k` - Output power of 2 of the modulus `2^k`. Default is `K_i.len()`.
     fn mod2k_bit_composition(
         &mut self,
         K_i: &Vec<&Self::W>,
+        k: Option<u16>,
     ) -> Result<Self::ItemMod2k, Self::ErrorMod2k>;
 
     // /// Compute `div*_{N}(x)` in <https://doi.org/10.1007/978-3-031-58751-1_12>.
@@ -480,6 +481,12 @@ pub trait Mod2kArithmetic {
     //     let k = x.k();
     //     let k_E = num_bits(N);
     //     let m = (1 << (k + k_E) as U + N - 1) / N; // m = ceil(2^(k+k_E) / N), m >= 2^k
+    //     let x_2k_1_bits = self.mod2k_bit_decomposition(x, None)?;
+    //     // push k+1 W::zero into x_2k_1_bits
+    //     let x_2k_1_bits = x_2k_1_bits
+    //         .iter()
+    //         .chain((0..k + 1).map(|_| Self::W::zero(1)))
+    //         .collect();
     //     let mx = x.cmul(m).mask_2k(2 * k + 1);
     //     let mx_bits = self.mod2k_bit_decomposition(&mx)?;
     //     let mx_bits_div_2_k_k_E = mx_bits.iter().skip((k + k_E) as usize).collect_vec();

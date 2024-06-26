@@ -224,9 +224,10 @@ impl<C: AbstractChannel, RNG: CryptoRng + Rng, OT, Wire: WireLabel> Mod2kArithme
     fn mod2k_bit_composition(
         &mut self,
         K_i: &Vec<&Self::W>,
+        k: Option<u16>,
     ) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
         self.garbler
-            .mod2k_bit_composition(K_i)
+            .mod2k_bit_composition(K_i, k)
             .map_err(Self::ErrorMod2k::from)
     }
 }

@@ -678,14 +678,16 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
     fn mod2k_bit_composition(
         &mut self,
         K_i: &Vec<&Self::W>,
+        k: Option<u16>,
     ) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
         debug_assert!(K_i.iter().all(|x| x.modulus() == 2));
-        let k = K_i.len() as u16; // output WireMod 2^k has k bits
+        let k = k.unwrap_or(K_i.len() as u16); // output WireMod 2^k from k bits
         let A = self.delta2k(k); // mod2k_delta (self.delta): A is the delta of output WireMod 2^k
 
-        // mod 2 to 2^k for each bit, then add them for free
+        // mod 2 to 2^k for each bit, then add them for free. Iteration stops at min(k, K_i.len())
         let B = K_i
             .iter()
+            .take(k as usize)
             .enumerate()
             .map(|(ith, &mod2wire)| {
                 let delta2k_times_2_pow_i = A.cmul(1 << ith);
@@ -693,6 +695,7 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
                     .unwrap()
             })
             .fold(WireMod2k::zero(k), |acc, mod2kwire| acc.plus(&mod2kwire));
+
         Ok(B)
     }
 }
