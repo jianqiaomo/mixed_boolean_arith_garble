@@ -464,35 +464,45 @@ pub trait Mod2kArithmetic {
         k: Option<u16>,
     ) -> Result<Self::ItemMod2k, Self::ErrorMod2k>;
 
-    // /// Compute `div*_{N}(x)` in <https://doi.org/10.1007/978-3-031-58751-1_12>.
-    // /// Not a free operation.
-    // ///
-    // /// div: ⌊x/N⌋ can be represented as ⌊(mx) % 2^(2k+1) / 2^(k+k_E)⌋ for x < 2^k.
-    // ///
-    // /// * `x` - The dividend.
-    // /// * `N` - The divisor.
-    // fn cdiv(&mut self, x: &Self::ItemMod2k, N: U) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
-    //     let num_bits = |value: u128| -> u16 {
-    //         if value == 0 {
-    //             return 0;
-    //         }
-    //         (128 - value.leading_zeros()) as u16
-    //     };
-    //     let k = x.k();
-    //     let k_E = num_bits(N);
-    //     let m = (1 << (k + k_E) as U + N - 1) / N; // m = ceil(2^(k+k_E) / N), m >= 2^k
-    //     let x_2k_1_bits = self.mod2k_bit_decomposition(x, None)?;
-    //     // push k+1 W::zero into x_2k_1_bits
-    //     let x_2k_1_bits = x_2k_1_bits
-    //         .iter()
-    //         .chain((0..k + 1).map(|_| Self::W::zero(1)))
-    //         .collect();
-    //     let mx = x.cmul(m).mask_2k(2 * k + 1);
-    //     let mx_bits = self.mod2k_bit_decomposition(&mx)?;
-    //     let mx_bits_div_2_k_k_E = mx_bits.iter().skip((k + k_E) as usize).collect_vec();
-    //     let r = self.mod2k_bit_composition(&mx_bits_div_2_k_k_E)?;
-    //     Ok(r)
-    // }
+    /// Compute `div*_{N}(x)` in <https://doi.org/10.1007/978-3-031-58751-1_12>.
+    /// Not a free operation.
+    ///
+    /// div: ⌊x/N⌋ can be represented as ⌊(mx) % 2^(2k+1) / 2^(k+k_E)⌋ for x < 2^k.
+    ///
+    /// * `x` - The dividend.
+    /// * `N` - The divisor.
+    fn cdiv(&mut self, x: &Self::ItemMod2k, N: U) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
+        let k = x.k();
+        if N == 0 { // todo: N == 1, N >= (1 << k)
+            panic!("[Mod2kArithmetic::cdiv] div N = {} not allowed.", N);
+        } else {
+            let num_bits = |value: u128| -> u16 {
+                if value == 0 {
+                    return 0;
+                }
+                (128 - value.leading_zeros()) as u16
+            };
+            let k_E = num_bits(N);
+            let m = ((1 << (k + k_E)) as U + N - 1) / N; // m = ceil(2^(k+k_E) / N), m >= 2^k
+
+            // change x from 2^k to 2^(2k+1) label
+            let x_bits = self.mod2k_bit_decomposition(x, None)?;
+            let x_2k_1 = self.mod2k_bit_composition(
+                &x_bits.iter().map(|w| w).collect::<Vec<&Self::W>>(),
+                Some(2 * k + 1),
+            )?;
+
+            let mx = x_2k_1.cmul(m);
+            let mx_2k_1 = self.mod2k_bit_decomposition(&mx, None)?; // end: Some(2 * k + 1).
+            let mx_2k_1_div_2_k_k_E = mx_2k_1 // mx mod 2^(2k+1) / 2^(k+k_E)
+                .iter()
+                .skip((k + k_E) as usize)
+                .map(|w| w)
+                .collect::<Vec<&Self::W>>();
+            let r = self.mod2k_bit_composition(&mx_2k_1_div_2_k_k_E, Some(k))?;
+            Ok(r)
+        }
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
