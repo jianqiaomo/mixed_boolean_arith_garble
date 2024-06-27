@@ -469,8 +469,8 @@ pub trait Mod2kArithmetic {
     ///
     /// div: ⌊x/N⌋ can be represented as ⌊(mx) % 2^(2k+1) / 2^(k+k_E)⌋ for x < 2^k.
     ///
-    /// * `x` - The dividend.
-    /// * `N` - The divisor.
+    /// * `x` - The dividend WireMod2k label.
+    /// * `N` - The divisor, a public constant.
     fn cdiv(&mut self, x: &Self::ItemMod2k, N: U) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
         let k = x.k();
         if N == 0 { // todo: N == 1, N >= (1 << k)
@@ -500,6 +500,29 @@ pub trait Mod2kArithmetic {
                 .map(|w| w)
                 .collect::<Vec<&Self::W>>();
             let r = self.mod2k_bit_composition(&mx_2k_1_div_2_k_k_E, Some(k))?;
+            Ok(r)
+        }
+    }
+
+    /// Compute `mod*_{N}(x)` in <https://doi.org/10.1007/978-3-031-58751-1_12>.
+    /// Not a free operation.
+    /// 
+    /// mod: `x % N` can be represented as `x - N * div*_{N}(x)` for x < 2^k.
+    /// 
+    /// * `x` - The dividend WireMod2k label.
+    /// * `N` - The modulus, a public constant.
+    fn cmod(&mut self, x: &Self::ItemMod2k, N: U) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
+        let k = x.k();
+        if N == 0 || N == 1 {
+            panic!("[Mod2kArithmetic::cmod] mod N = {} not allowed.", N);
+        }
+        else if N >= (1 << k) {
+            Ok(x.clone())
+        } 
+        else {
+            let div = self.cdiv(x, N)?;
+            let N_div = div.cmul(N);
+            let r = x.minus(&N_div);
             Ok(r)
         }
     }
