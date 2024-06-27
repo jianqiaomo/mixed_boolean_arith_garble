@@ -271,6 +271,10 @@ pub fn crt_inv_factor(xs: &[u16], q: u128) -> u128 {
 /// Get the constants `c_i` list for the CRT inversion, as the
 /// original `value = Σ (c_i * x_i) mod N`.
 /// And determine how many bits are needed to represent the max value.
+/// 
+/// @param `ps`: list of primes.
+/// 
+/// @return: constants `c_i` list for the CRT inversion, and the number of bits of `N`.
 ///
 /// Ref: <https://www.ctfrecipes.com/cryptography/general-knowledge/maths/modular-arithmetic/chinese-remainder-theorem>,
 /// <https://doi.org/10.1007/978-3-031-58751-1_12>.

@@ -483,7 +483,7 @@ pub trait Mod2kArithmetic {
                 (128 - value.leading_zeros()) as u16
             };
             let k_E = num_bits(N);
-            let m = ((1 << (k + k_E)) as U + N - 1) / N; // m = ceil(2^(k+k_E) / N), m >= 2^k
+            let m = (((1 as U) << (k + k_E)) as U + N - 1) / N; // m = ceil(2^(k+k_E) / N), m >= 2^k
 
             // change x from 2^k to 2^(2k+1) label
             let x_bits = self.mod2k_bit_decomposition(x, None)?;
