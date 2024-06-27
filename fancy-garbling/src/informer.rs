@@ -327,16 +327,16 @@ impl<F: FancyArithmetic> FancyArithmetic for Informer<F> {
         Ok(result)
     }
 
-    fn bit_composition(&mut self, K_j: &Vec<&Self::Item>) -> Result<Self::Item, Self::Error> {
-        let result = self.underlying.bit_composition(K_j)?;
+    fn bit_composition(&mut self, K_j: &Vec<&Self::Item>, p: Option<u16>) -> Result<Self::Item, Self::Error> {
+        let result = self.underlying.bit_composition(K_j, p)?;
         self.stats.ncompositions += 1;
-        self.stats.nciphertexts += (K_j.len() - 1) * 2;
-        self.update_moduli(crate::util::a_prime_with_width(K_j.len() as u16));
+        self.stats.nciphertexts += K_j.len() * 2;
+        self.update_moduli(p.unwrap_or(crate::util::a_prime_with_width(K_j.len() as u16)));
         Ok(result)
     }
 
-    fn bit_decomposition(&mut self, AK: &Self::Item) -> Result<Vec<Self::Item>, Self::Error> {
-        let result = self.underlying.bit_decomposition(AK)?;
+    fn bit_decomposition(&mut self, AK: &Self::Item, end: Option<u16>) -> Result<Vec<Self::Item>, Self::Error> {
+        let result = self.underlying.bit_decomposition(AK, end)?;
         self.stats.ndecompositions += 1;
         self.stats.nciphertexts += result.len() * AK.modulus() as usize;
         self.update_moduli(2);

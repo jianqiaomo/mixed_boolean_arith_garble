@@ -234,12 +234,12 @@ impl<C: AbstractChannel, Wire: WireLabel + ArithmeticWire> FancyArithmetic for E
         }
     }
 
-    fn bit_decomposition(&mut self, AK: &Wire) -> Result<Vec<Wire>, Self::Error> {
+    fn bit_decomposition(&mut self, AK: &Wire, end: Option<u16>) -> Result<Vec<Wire>, Self::Error> {
         let q = AK.modulus();
         // bit decomposition takes mod q=p^k where p is in PRIMES. (assuming k=1)
         debug_assert!(1 == q2pk(q).1);
         let p = q2pk(q).0; // let p = q;
-        let j = bits_per_modulus(p);
+        let j = end.unwrap_or(bits_per_modulus(p));
 
         let gate_num = self.current_gate();
         let x_bar = AK.color();
@@ -262,13 +262,13 @@ impl<C: AbstractChannel, Wire: WireLabel + ArithmeticWire> FancyArithmetic for E
         Ok(l_j)
     }
 
-    fn bit_composition(&mut self, K_j: &Vec<&Wire>) -> Result<Wire, EvaluatorError> {
+    fn bit_composition(&mut self, K_j: &Vec<&Wire>, p: Option<u16>) -> Result<Wire, EvaluatorError> {
         // Assume all K_j is mod 2 (Boolean)
         debug_assert!(K_j.iter().all(|x| x.modulus() == 2));
 
         let j = K_j.len();
         // p is output wire prime that is enough to fit j bits
-        let p = a_prime_with_width(j as u16);
+        let p = p.unwrap_or(a_prime_with_width(j as u16));
 
         let mut Tab = Vec::with_capacity(j * 2);
         for _ in 0..(j * 2) {
@@ -348,7 +348,7 @@ impl<C: AbstractChannel, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, Wire>
     ) -> Result<Vec<Self::W>, Self::ErrorMod2k> {
         let k = AK.k();
         let gate_num = self.current_gate();
-        let end = std::cmp::min(end.unwrap_or(k), k);
+        let end = end.unwrap_or(k);
 
         let mut L_i = AK.clone(); // initial: L^(0)
         let mut lower_l = Vec::with_capacity(end as usize);
@@ -363,11 +363,11 @@ impl<C: AbstractChannel, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, Wire>
 
             // miniBC: use K_i[ith] and mod_qto2k to reconstruct D^(i) or L^(i+1)
             if ith < end - 1 {
-                let D_i = self.mod_qto2k(&lower_l_i, None, k - ith).unwrap();
+                let D_i = self.mod_qto2k(&lower_l_i, None, std::cmp::max(k as i16 - ith as i16, 1) as u16).unwrap();
                 // L^(i+1) = (L^(i) - D^(i)) % 2^{k-i} / 2
                 let temp_L_i_next = L_i.minus(&D_i);
                 L_i = WireMod2k::new(
-                    k - (ith + 1),
+                    std::cmp::max(k as i16 - (ith + 1) as i16, 1) as u16,
                     temp_L_i_next.digits().iter().map(|x| x / 2).collect(),
                 );
             }

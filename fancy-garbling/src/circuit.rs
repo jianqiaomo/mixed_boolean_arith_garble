@@ -383,6 +383,7 @@ impl<F: FancyArithmetic> EvaluableCircuit<F> for ArithmeticCircuit {
                         cache[xref.ix]
                             .as_ref()
                             .ok_or_else(|| F::Error::from(FancyError::UninitializedValue))?,
+                        None,
                     )?,
                 ),
                 ArithmeticGate::BitComposition { ref xrefs, out, .. } => (
@@ -397,6 +398,7 @@ impl<F: FancyArithmetic> EvaluableCircuit<F> for ArithmeticCircuit {
                             })
                             .collect::<Result<Vec<_>, _>>()?
                             .as_ref(),
+                        None,
                     )?],
                 ),
                 ArithmeticGate::Mul {
@@ -881,19 +883,19 @@ impl FancyArithmetic for CircuitBuilder<ArithmeticCircuit> {
         Ok(self.gate(gate, output_modulus))
     }
 
-    fn bit_composition(&mut self, K_j: &Vec<&CircuitRef>) -> Result<CircuitRef, Self::Error> {
+    fn bit_composition(&mut self, K_j: &Vec<&CircuitRef>, p: Option<u16>) -> Result<CircuitRef, Self::Error> {
         let gate = ArithmeticGate::BitComposition {
             xrefs: K_j.iter().map(|&&r| r).collect::<Vec<CircuitRef>>(),
             id: self.get_next_ciphertext_id(),
             out: None,
         };
-        let output_modulus = crate::util::a_prime_with_width(K_j.len() as u16);
+        let output_modulus = p.unwrap_or(crate::util::a_prime_with_width(K_j.len() as u16));
         Ok(self.gate(gate, output_modulus))
     }
 
-    fn bit_decomposition(&mut self, AK: &CircuitRef) -> Result<Vec<CircuitRef>, Self::Error> {
+    fn bit_decomposition(&mut self, AK: &CircuitRef, end: Option<u16>) -> Result<Vec<CircuitRef>, Self::Error> {
         let id = self.get_next_ciphertext_id();
-        let output_bits_num = crate::util::bits_per_modulus(AK.modulus());
+        let output_bits_num = end.unwrap_or(crate::util::bits_per_modulus(AK.modulus()));
         let gate = (0..output_bits_num)
             .map(|_| {
                 self.gate(

@@ -171,11 +171,11 @@ impl FancyArithmetic for DepthInformer {
         })
     }
 
-    fn bit_composition(&mut self, _K_j: &Vec<&Self::Item>) -> Result<Self::Item, Self::Error> {
+    fn bit_composition(&mut self, _K_j: &Vec<&Self::Item>, _: Option<u16>) -> Result<Self::Item, Self::Error> {
         Err(DepthError::BitCompositionUnsupported)
     }
 
-    fn bit_decomposition(&mut self, _AK: &Self::Item) -> Result<Vec<Self::Item>, Self::Error> {
+    fn bit_decomposition(&mut self, _AK: &Self::Item, _: Option<u16>) -> Result<Vec<Self::Item>, Self::Error> {
         Err(DepthError::BitDecompositionUnsupported)
     }
 

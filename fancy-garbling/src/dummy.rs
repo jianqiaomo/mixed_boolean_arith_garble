@@ -69,11 +69,11 @@ impl FancyInput for Dummy {
 
     /// Although, receive is undefined for Dummy which is a single party "protocol",
     /// I implement it to get correct communication cost in Informer.
-    /// 
-    /// Usage: bob_input = 
-    /// 
+    ///
+    /// Usage: bob_input =
+    ///
     ///     encode(); // to get computation result number
-    /// 
+    ///
     ///     or receive();  // to get communication cost, but computation will show 0.
     fn receive_many(&mut self, _moduli: &[u16]) -> Result<Vec<DummyVal>, DummyError> {
         // Receive is undefined for Dummy which is a single party "protocol"
@@ -125,11 +125,15 @@ impl FancyArithmetic for Dummy {
         })
     }
 
-    fn bit_decomposition(&mut self, AK: &DummyVal) -> Result<Vec<DummyVal>, Self::Error> {
+    fn bit_decomposition(
+        &mut self,
+        AK: &DummyVal,
+        end: Option<u16>,
+    ) -> Result<Vec<DummyVal>, Self::Error> {
         let mut res = Vec::new();
         let mut val = AK.val;
         let modulus = AK.modulus;
-        let num_bits = bits_per_modulus(modulus);
+        let num_bits = end.unwrap_or(bits_per_modulus(modulus));
         for _ in 0..num_bits {
             res.push(DummyVal {
                 val: val & 1,
@@ -140,12 +144,19 @@ impl FancyArithmetic for Dummy {
         Ok(res)
     }
 
-    fn bit_composition(&mut self, K_j: &Vec<&DummyVal>) -> Result<DummyVal, Self::Error> {
+    fn bit_composition(
+        &mut self,
+        K_j: &Vec<&DummyVal>,
+        p: Option<u16>,
+    ) -> Result<DummyVal, Self::Error> {
+        let p = p.unwrap_or(crate::util::a_prime_with_width(K_j.len() as u16));
         Ok(DummyVal {
-            val: K_j.iter().enumerate().fold(0, |acc, (i, x)| {
-                acc + (x.val << i)
-            }),
-            modulus: crate::util::a_prime_with_width(K_j.len() as u16),
+            val: K_j
+                .iter()
+                .enumerate()
+                .fold(0, |acc, (i, x)| acc + (x.val << i))
+                % p,
+            modulus: p,
         })
     }
 

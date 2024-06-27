@@ -456,8 +456,8 @@ pub trait Mod2kArithmetic {
     /// Compose WireMod2 into arithmetic wire. Returns wire in mod 2^k.
     /// Link: <https://doi.org/10.1007/978-3-031-58751-1_12>
     ///
-    /// * `K_i` - Vector of WireMod2 to be composed into arithmetic wire. There should be `k` elements.
-    /// * `k` - Output power of 2 of the modulus `2^k`. Default is `K_i.len()`.
+    /// * `K_i` - Vector of WireMod2 to be composed into arithmetic wire.
+    /// * `k` - Take first `k` elements of `K_i`, thus output power of 2 of the modulus `2^k`. Default is `K_i.len()`.
     fn mod2k_bit_composition(
         &mut self,
         K_i: &Vec<&Self::W>,

@@ -472,12 +472,12 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel + ArithmeticW
         Ok(C)
     }
 
-    fn bit_decomposition(&mut self, AK: &Wire) -> Result<Vec<Wire>, Self::Error> {
+    fn bit_decomposition(&mut self, AK: &Wire, end: Option<u16>) -> Result<Vec<Wire>, Self::Error> {
         let q = AK.modulus();
         // bit decomposition takes mod q=p^k where p is in PRIMES. (assuming k=1)
         debug_assert!(1 == q2pk(q).1);
         let p = q2pk(q).0; // let p = q;
-        let j = bits_per_modulus(p);
+        let j = end.unwrap_or(bits_per_modulus(p));
 
         let K_j = self
             .encode_many_wires(&vec![0; j as usize], &vec![2; j as usize])?
@@ -513,13 +513,13 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel + ArithmeticW
         Ok(K_j)
     }
 
-    fn bit_composition(&mut self, K_j: &Vec<&Wire>) -> Result<Wire, GarblerError> {
+    fn bit_composition(&mut self, K_j: &Vec<&Wire>, p: Option<u16>) -> Result<Wire, GarblerError> {
         // Assume all K_j is mod 2 (Boolean)
         debug_assert!(K_j.iter().all(|x| x.modulus() == 2));
 
         let j = K_j.len();
         // p is output wire prime that is enough to fit j bits
-        let p = a_prime_with_width(j as u16);
+        let p = p.unwrap_or(a_prime_with_width(j as u16));
 
         let A = self.delta(p); // A is the delta of output WireModp
         let B = self.encode_wire(0, p).0; // B is the zero wire of output WireModp
@@ -628,7 +628,7 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
         let gate_num = self.current_gate();
         let mod2k_delta = self.delta2k(k);
         let mod2_delta = self.delta(2);
-        let end = std::cmp::min(end.unwrap_or(k), k);
+        let end = end.unwrap_or(k);
 
         let K_i = self
             .encode_many_wires(&vec![0; end as usize], &vec![2; end as usize])?
@@ -642,7 +642,8 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
                 let A_i_plus_beta_delta = if beta == 0 {
                     A_i.clone()
                 } else {
-                    A_i.plus(&mod2k_delta.mask_2k(k - ith)).clone()
+                    A_i.plus(&mod2k_delta.mask_2k(std::cmp::max(k as i16 - ith as i16, 1) as u16))
+                        .clone()
                 };
                 let left = A_i_plus_beta_delta.hash(tweak2(gate_num as u64, ith as u64));
                 let right = if beta == 0 {
@@ -660,14 +661,19 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
 
             // miniBC: use K_i[ith] and mod_qto2k for sampling DK^(i) or A^(i+1)
             if ith < end - 1 {
-                let mod2k_delta_i = mod2k_delta.mask_2k(k - ith); // delta2k % 2^(k-i)
+                let mod2k_delta_i =
+                    mod2k_delta.mask_2k(std::cmp::max(k as i16 - ith as i16, 1) as u16); // delta2k % 2^(k-i)
                 let DK_i_beta0 = self
-                    .mod_qto2k(&K_i[ith as usize], Option::from(&mod2k_delta_i), k - ith)
+                    .mod_qto2k(
+                        &K_i[ith as usize],
+                        Option::from(&mod2k_delta_i),
+                        std::cmp::max(k as i16 - ith as i16, 1) as u16,
+                    )
                     .unwrap();
                 // A^(i+1) = ( A^(i) - DK^(i)_0 ) / 2
                 let temp_A_i_next = A_i.minus(&DK_i_beta0);
                 A_i = WireMod2k::new(
-                    k - (ith + 1),
+                    std::cmp::max(k as i16 - (ith + 1) as i16, 1) as u16,
                     temp_A_i_next.digits().iter().map(|x| x / 2).collect(),
                 );
             }

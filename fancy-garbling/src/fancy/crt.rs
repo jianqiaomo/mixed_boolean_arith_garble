@@ -477,6 +477,9 @@ pub trait CrtGadgets:
 impl<F: Mod2kArithmetic + CrtGadgets> MixCrtBinaryGadgets for F {}
 
 /// Extension trait for CRT and Binary transformations.
+/// 
+/// Since digits are stored in u128, the maximum number of bits
+/// of binary supported is **42**.
 pub trait MixCrtBinaryGadgets: Mod2kArithmetic + CrtGadgets {
     /// Decompose CRT arithmetic wire into binary.
     /// Link: <https://doi.org/10.1007/978-3-031-58751-1_12>
