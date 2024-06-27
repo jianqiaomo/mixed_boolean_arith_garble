@@ -191,7 +191,7 @@ impl WireMod2k {
     /// Create a new `mod-2^k` wire with the given `k` and digits.
     pub fn new(k: u16, ds: Vec<U>) -> Self {
         if k < 1 || k >= K_MAX {
-            panic!("[WireModpk::new] 2's power k = {} must be [1, 128).", k)
+            panic!("[WireModpk::new] 2's power k = {} must be [1, {}).", k, K_MAX);
         }
         Self { k, ds }
     }
@@ -201,8 +201,8 @@ impl WireMod2k {
     pub fn modulus(&self) -> U {
         if self.k < 1 || self.k >= K_MAX {
             panic!(
-                "[WireModpk::modulus] 2's power k = {} must be [1, 128).",
-                self.k
+                "[WireModpk::modulus] 2's power k = {} must be [1, {}).",
+                self.k, K_MAX
             )
         } else {
             1 << self.k
@@ -213,7 +213,7 @@ impl WireMod2k {
 impl WireLabelMod2k for WireMod2k {
     fn rand<R: CryptoRng + RngCore>(rng: &mut R, k: u16) -> Self {
         if k < 1 || k >= K_MAX {
-            panic!("[WireModpk::rand] 2's power k = {} must be [1, 128).", k);
+            panic!("[WireModpk::rand] 2's power k = {} must be [1, {}).", k, K_MAX);
         } else {
             let mask = (1 << k) - 1;
             let ds = (0..util::digits_per_u128(2))
@@ -259,7 +259,7 @@ impl WireLabelMod2k for WireMod2k {
     fn cmul_eq(&mut self, c: U) -> &mut Self {
         let q = self.modulus();
         let mask = q - 1;
-        self.ds.iter_mut().for_each(|d| *d = (*d) * c & mask);
+        self.ds.iter_mut().for_each(|d| *d = (*d).wrapping_mul(c) & mask);
         self
     }
 
@@ -277,7 +277,7 @@ impl WireLabelMod2k for WireMod2k {
 
     fn zero(k: u16) -> Self {
         if k < 1 || k >= K_MAX {
-            panic!("[WireModpk::zero] 2's power k = {} must be [1, 128).", k);
+            panic!("[WireModpk::zero] 2's power k = {} must be [1, {}).", k, K_MAX);
         }
         Self {
             k,
@@ -287,7 +287,7 @@ impl WireLabelMod2k for WireMod2k {
 
     fn mask_2k(&self, k: u16) -> Self {
         if k < 1 || k >= K_MAX {
-            panic!("[WireModpk::mask_2k] 2's power k = {} must be [1, 128).", k);
+            panic!("[WireModpk::mask_2k] 2's power k = {} must be [1, {}).", k, K_MAX);
         }
         let mask = (1 << k) - 1;
         let ds = self.digits().iter().map(|&d| d & mask).collect();
@@ -339,8 +339,8 @@ impl WireLabelMod2k for WireMod2k {
         let k = self.k;
         if k < 1 || k >= K_MAX {
             panic!(
-                "[WireModpk::mod_as_block] 2's power k = {} must be [1, 128).",
-                k
+                "[WireModpk::mod_as_block] 2's power k = {} must be [1, {}).",
+                k, K_MAX
             );
         }
         WireMod2k {
@@ -353,8 +353,8 @@ impl WireLabelMod2k for WireMod2k {
     fn from_blocks(inp: Vec<Block>, k: u16) -> Self {
         if k < 1 || k >= K_MAX {
             panic!(
-                "[WireModpk::from_blocks] 2's power k = {} must be [1, 128).",
-                k
+                "[WireModpk::from_blocks] 2's power k = {} must be [1, {}).",
+                k, K_MAX
             );
         }
 

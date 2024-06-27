@@ -484,7 +484,7 @@ pub trait MixCrtBinaryGadgets: Mod2kArithmetic + CrtGadgets {
         &mut self,
         x: &CrtBundle<Self::W>,
     ) -> Result<BinaryBundle<Self::W>, Self::ErrorMod2k> {
-        let num_bits = |&value: &u128| -> u16 {
+        let num_bits = |value: u128| -> u16 {
             if value == 0 {
                 return 0;
             }
@@ -493,9 +493,13 @@ pub trait MixCrtBinaryGadgets: Mod2kArithmetic + CrtGadgets {
         let ps = x.moduli();
         let N = util::product(&ps);
         let (c_i, k_bits) = util::crt_inv_constants(&ps);
-        let c_i_max_bits = num_bits(c_i.iter().max().unwrap());
-        let ps_max_bits = num_bits(&(ps.iter().max().unwrap().clone() as u128));
-        let sum_x_bits = c_i_max_bits + ps_max_bits + ps.len() as u16;
+        let c_i_ps_max_bits = c_i
+            .iter()
+            .zip(ps.iter())
+            .map(|(&c, &p)| num_bits(c as u128 * p as u128))
+            .max()
+            .unwrap();
+        let sum_x_bits = c_i_ps_max_bits + ps.len() as u16; // potential max bits needed for Σcx
         let x_2k_c_i_sum = x
             .iter()
             .zip(c_i.iter())
