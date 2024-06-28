@@ -477,7 +477,7 @@ pub trait CrtGadgets:
 impl<F: Mod2kArithmetic + CrtGadgets> MixCrtBinaryGadgets for F {}
 
 /// Extension trait for CRT and Binary transformations.
-/// 
+///
 /// Since digits are stored in u128, the maximum number of bits
 /// of binary supported is **42**.
 pub trait MixCrtBinaryGadgets: Mod2kArithmetic + CrtGadgets {
@@ -514,6 +514,36 @@ pub trait MixCrtBinaryGadgets: Mod2kArithmetic + CrtGadgets {
         let x_mod_N = self.cmod(&x_2k_c_i_sum, N)?;
         let r = self.mod2k_bit_decomposition(&x_mod_N, Some(k_bits))?;
         Ok(BinaryBundle::new(r))
+    }
+
+    /// Compose binary wires into CRT arithmetic.
+    /// Link: <https://doi.org/10.1007/978-3-031-58751-1_12>
+    fn crt_bit_composition(
+        &mut self,
+        x: &BinaryBundle<Self::Item>,
+    ) -> Result<CrtBundle<Self::Item>, Self::Error> {
+        let bitwidth = x.size();
+        let crt_modulus_N = util::modulus_with_width(bitwidth as u32);
+        let p_s = util::factor(crt_modulus_N);
+        let r = p_s
+            .iter()
+            .map(|&p_i| {
+                let x_i: Vec<Self::Item> = x
+                    .wires()
+                    .iter()
+                    .enumerate()
+                    .map(|(ith, K_i)| {
+                        let c_i = (1 << ith as u128) % (p_i as u128);
+                        let K_i_p_i = self.mod_change(K_i, p_i).unwrap();
+                        self.cmul(&K_i_p_i, c_i as u16).unwrap()
+                    })
+                    .collect_vec();
+                x_i.iter().skip(1).fold(x_i[0].clone(), |acc, K_i_c_i| {
+                    self.add(&acc, K_i_c_i).unwrap()
+                })
+            })
+            .collect_vec();
+        Ok(CrtBundle::new(r))
     }
 }
 
