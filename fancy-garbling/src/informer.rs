@@ -2,7 +2,7 @@
 
 use crate::{
     fancy::{Fancy, FancyInput, FancyReveal, HasModulus},
-    FancyArithmetic, FancyBinary,
+    FancyArithmetic, FancyBinary, Mod2kArithmetic, WireLabelMod2k,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -28,8 +28,12 @@ pub struct InformerStats {
     nprojs: usize,
     ncompositions: usize,
     ndecompositions: usize,
+    nmodqto2k: usize,
+    nmod2k_BD: usize,
+    nmod2k_BC: usize,
     nciphertexts: usize,
     moduli: HashMap<u16, usize>,
+    moduli2k: HashMap<u16, usize>,
 }
 
 impl InformerStats {
@@ -103,6 +107,21 @@ impl InformerStats {
         self.ndecompositions
     }
 
+    /// Number of mod_qto2k in the Mod2kArithmetic computation.
+    pub fn num_modqto2k(&self) -> usize {
+        self.nmodqto2k
+    }
+
+    /// Number of mod2k_bit_decomposition in the Mod2kArithmetic computation.
+    pub fn num_mod2k_BD(&self) -> usize {
+        self.nmod2k_BD
+    }
+
+    /// Number of mod2k_bit_composition in the Mod2kArithmetic computation.
+    pub fn num_mod2k_BC(&self) -> usize {
+        self.nmod2k_BC
+    }
+
     /// Number of ciphertexts in the fancy computation.
     pub fn num_ciphertexts(&self) -> usize {
         self.nciphertexts
@@ -127,6 +146,9 @@ impl std::fmt::Display for InformerStats {
     ///   multiplications:                6800
     ///   compositions:                      0
     ///   decompositions:                    0
+    ///   mod_qto2k:                         0
+    ///   mod2k_bit_composition:             0
+    ///   mod2k_bit_decomposition:           0
     ///   ciphertexts:                   13600 // comms cost: 1.66 Mb (1700.00 Kb)
     ///   total comms cost:            1.75 Mb // 1700.00 Kb
     /// ```
@@ -183,6 +205,9 @@ impl std::fmt::Display for InformerStats {
         writeln!(f, "  multiplications:    {:16}", self.num_muls())?;
         writeln!(f, "  compositions:       {:16}", self.num_compositions())?;
         writeln!(f, "  decompositions:     {:16}", self.num_decompositions())?;
+        writeln!(f, "  mod_qto2k:          {:16}", self.num_modqto2k())?;
+        writeln!(f, "  mod2k_bit_composition: {:12}", self.num_mod2k_BC())?;
+        writeln!(f, "  mod2k_bit_decomposition: {:10}", self.num_mod2k_BD())?;
         let cs = self.num_ciphertexts();
         let kb = cs as f64 * 128.0 / 1000.0;
         let mb = kb / 1000.0;
@@ -196,6 +221,7 @@ impl std::fmt::Display for InformerStats {
         let mb = total / 1000.0;
         writeln!(f, "  total communication:  {:11.2} Mb", mb)?;
         writeln!(f, "  wire moduli: {:#?}", self.moduli)?;
+        writeln!(f, "  wire moduli 2^k: {:#?}", self.moduli2k)?;
         Ok(())
     }
 }
@@ -217,8 +243,12 @@ impl<F: Fancy> Informer<F> {
                 nprojs: 0,
                 ncompositions: 0,
                 ndecompositions: 0,
+                nmodqto2k: 0,
+                nmod2k_BD: 0,
+                nmod2k_BC: 0,
                 nciphertexts: 0,
                 moduli: HashMap::new(),
+                moduli2k: HashMap::new(),
             },
         }
     }
@@ -230,6 +260,12 @@ impl<F: Fancy> Informer<F> {
 
     fn update_moduli(&mut self, q: u16) {
         let entry = self.stats.moduli.entry(q).or_insert(0);
+        *entry += 1;
+    }
+
+    /// Update the moduli of wire 2^k
+    fn update_moduli2k(&mut self, k: u16) {
+        let entry = self.stats.moduli2k.entry(k).or_insert(0);
         *entry += 1;
     }
 }
@@ -327,7 +363,11 @@ impl<F: FancyArithmetic> FancyArithmetic for Informer<F> {
         Ok(result)
     }
 
-    fn bit_composition(&mut self, K_j: &Vec<&Self::Item>, p: Option<u16>) -> Result<Self::Item, Self::Error> {
+    fn bit_composition(
+        &mut self,
+        K_j: &Vec<&Self::Item>,
+        p: Option<u16>,
+    ) -> Result<Self::Item, Self::Error> {
         let result = self.underlying.bit_composition(K_j, p)?;
         self.stats.ncompositions += 1;
         self.stats.nciphertexts += K_j.len() * 2;
@@ -335,7 +375,11 @@ impl<F: FancyArithmetic> FancyArithmetic for Informer<F> {
         Ok(result)
     }
 
-    fn bit_decomposition(&mut self, AK: &Self::Item, end: Option<u16>) -> Result<Vec<Self::Item>, Self::Error> {
+    fn bit_decomposition(
+        &mut self,
+        AK: &Self::Item,
+        end: Option<u16>,
+    ) -> Result<Vec<Self::Item>, Self::Error> {
         let result = self.underlying.bit_decomposition(AK, end)?;
         self.stats.ndecompositions += 1;
         self.stats.nciphertexts += result.len() * AK.modulus() as usize;
@@ -353,6 +397,51 @@ impl<F: FancyArithmetic> FancyArithmetic for Informer<F> {
         self.stats.nprojs += 1;
         self.stats.nciphertexts += x.modulus() as usize - 1;
         self.update_moduli(q);
+        Ok(result)
+    }
+}
+
+impl<F: Fancy + Mod2kArithmetic> Mod2kArithmetic for Informer<F> {
+    type ItemMod2k = F::ItemMod2k;
+    type W = F::W;
+    type ErrorMod2k = F::ErrorMod2k;
+
+    fn mod_qto2k(
+        &mut self,
+        x: &Self::W,
+        delta2k: Option<&Self::ItemMod2k>,
+        k_out: u16,
+    ) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
+        let result = self.underlying.mod_qto2k(x, delta2k, k_out)?;
+        self.stats.nmodqto2k += 1;
+        self.stats.nciphertexts += k_out as usize * (x.modulus() - 1) as usize;
+        self.update_moduli2k(k_out);
+        Ok(result)
+    }
+
+    fn mod2k_bit_decomposition(
+        &mut self,
+        AK: &Self::ItemMod2k,
+        end: Option<u16>,
+    ) -> Result<Vec<Self::W>, Self::ErrorMod2k> {
+        let result = self.underlying.mod2k_bit_decomposition(AK, end)?;
+        self.stats.nmod2k_BD += 1;
+        let k = AK.k();
+        let end = end.unwrap_or(k);
+        self.stats.nciphertexts += end as usize * 2;
+        self.update_moduli(2);
+        Ok(result)
+    }
+
+    fn mod2k_bit_composition(
+        &mut self,
+        K_i: &Vec<&Self::W>,
+        k: Option<u16>,
+    ) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
+        let result = self.underlying.mod2k_bit_composition(K_i, k)?;
+        self.stats.nmod2k_BC += 1;
+        let k = k.unwrap_or(K_i.len() as u16);
+        self.update_moduli2k(k);
         Ok(result)
     }
 }
