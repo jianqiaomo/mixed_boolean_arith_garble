@@ -437,7 +437,7 @@ mod streaming {
 mod complex {
     use crate::{
         dummy::Dummy, util::RngExt, AllWire, CrtBundle, CrtGadgets, Evaluator, FancyArithmetic,
-        FancyBinary, FancyInput, Garbler,
+        FancyBinary, FancyInput, FancyReveal, Garbler, MixCrtBinaryGadgets,
     };
     use itertools::Itertools;
     use rand::thread_rng;
@@ -455,6 +455,80 @@ mod complex {
             zs.push(z);
         }
         b.crt_outputs(&zs)
+    }
+
+    #[test]
+    fn test_crt_bin_conv() {
+        let mut rng = thread_rng();
+        let N = 10; // random N # of inputs
+        let qs_all = vec![
+            crate::util::primes_with_width(8),
+            crate::util::primes_with_width(16),
+            crate::util::primes_with_width(32),
+        ];
+        let Qs = qs_all.iter().map(|q| crate::util::product(q)).collect_vec();
+        for (ith, &Q) in Qs.iter().enumerate() {
+            for _ in 0..16 {
+                let input = (0..N).map(|_| rng.gen_u128() % Q).collect_vec();
+
+                // test streaming garbler and evaluator
+                let (sender, receiver) = unix_channel_pair();
+
+                let gb_result_handle = std::thread::spawn(move || {
+                    let mut garbler = Garbler::<_, _, AllWire>::new(sender, AesRng::new());
+
+                    // encode input and send it to the evaluator
+                    let mut gb_inp = Vec::with_capacity(N);
+                    for X in &input {
+                        let (zero, enc) = garbler.crt_encode_wire(*X, Q).unwrap();
+                        for w in enc.iter() {
+                            garbler.send_wire(w).unwrap();
+                        }
+                        gb_inp.push(zero);
+                    }
+                    let gb_result = gb_inp
+                        .iter()
+                        .map(|x| {
+                            let decomp = garbler.crt_bit_decomposition(x).unwrap();
+                            garbler.crt_bit_composition(&decomp).unwrap()
+                        })
+                        .collect_vec();
+                    garbler.crt_reveal_many(&gb_result).unwrap()
+                });
+
+                let mut evaluator = Evaluator::<_, AllWire>::new(receiver);
+
+                // receive encoded wires from the garbler thread
+                let mut ev_inp = Vec::with_capacity(N);
+                for _ in 0..N {
+                    let ws = qs_all[ith]
+                        .iter()
+                        .map(|q| evaluator.read_wire(*q).unwrap())
+                        .collect_vec();
+                    ev_inp.push(CrtBundle::new(ws));
+                }
+
+                let ev_result = ev_inp
+                    .iter()
+                    .map(|x| {
+                        let decomp = evaluator.crt_bit_decomposition(x).unwrap();
+                        evaluator.crt_bit_composition(&decomp).unwrap()
+                    })
+                    .collect_vec();
+                let ev_result_rev = evaluator.crt_reveal_many(&ev_result).unwrap();
+
+                let gb_result_rev = gb_result_handle.join().expect("Garbler thread panicked");
+                // Compare each element of the result and correct_result
+                assert_eq!(gb_result_rev.len(), ev_result_rev.len(), "Length mismatch");
+                for (i, (gbs, evs)) in gb_result_rev.iter().zip(ev_result_rev.iter()).enumerate() {
+                    assert_eq!(
+                        gbs, evs,
+                        "Mismatch at index {}, garbler = {}, evaluator = {}",
+                        i, gbs, evs
+                    );
+                }
+            }
+        }
     }
 
     #[test]
