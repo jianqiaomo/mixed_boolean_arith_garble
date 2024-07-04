@@ -496,13 +496,12 @@ pub trait MixCrtBinaryGadgets: Mod2kArithmetic + CrtGadgets {
         let ps = x.moduli();
         let N = util::product(&ps);
         let (c_i, k_bits) = util::crt_inv_constants(&ps);
-        let c_i_ps_max_bits = c_i
-            .iter()
-            .zip(ps.iter())
-            .map(|(&c, &p)| num_bits(c as u128 * p as u128))
-            .max()
-            .unwrap();
-        let sum_x_bits = c_i_ps_max_bits + ps.len() as u16; // potential max bits needed for Σcx
+        let sum_x_bits = num_bits(
+            c_i.iter()
+                .zip(ps.iter())
+                .map(|(&c, &p)| c as u128 * (p as u128 - 1))
+                .fold(0, |acc, x| acc + x),
+        ); // potential max bits needed for Σcx
         let x_2k_c_i_sum = x
             .iter()
             .zip(c_i.iter())
