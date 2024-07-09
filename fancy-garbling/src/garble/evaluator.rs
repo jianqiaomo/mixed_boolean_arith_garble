@@ -316,11 +316,10 @@ impl<C: AbstractChannel, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, Wire>
         let g = self.current_gate();
         let t = tweak(g);
         if x.color() == 0 {
-            Ok(WireMod2k::zero(k_out).xor_hash_ofb_back(t, x.as_block())) // Ok(x.hashback(t, q))
+            Ok(WireMod2k::zero(k_out).xor_hash_ofb_back(t, x.as_block()))
         } else {
             let ct = gate[x.color() as usize - 1].clone();
             Ok(WireMod2k::from_blocks(ct, k_out).xor_hash_ofb_back(t, x.as_block()))
-            // Ok(Wire::from_block(ct ^ x.hash(t), q))
         }
     }
 

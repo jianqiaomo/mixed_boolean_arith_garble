@@ -425,9 +425,21 @@ impl<F: Fancy + Mod2kArithmetic> Mod2kArithmetic for Informer<F> {
         end: Option<u16>,
     ) -> Result<Vec<Self::W>, Self::ErrorMod2k> {
         let result = self.underlying.mod2k_bit_decomposition(AK, end)?;
-        self.stats.nmod2k_BD += 1;
         let k = AK.k();
         let end = end.unwrap_or(k);
+        // For ciphertext count only:
+        for ith in 0..(end - 1) {
+            let mod2k_delta = AK.clone();
+            let mod2k_delta_i = mod2k_delta.mask_2k(std::cmp::max(k as i16 - ith as i16, 1) as u16); // delta2k % 2^(k-i)
+            let DK_i_beta0 = self
+                    .mod_qto2k(
+                        &result[ith as usize],
+                        Option::from(&mod2k_delta_i),
+                        std::cmp::max(k as i16 - ith as i16, 1) as u16,
+                    )
+                    .unwrap();
+        }
+        self.stats.nmod2k_BD += 1;
         self.stats.nciphertexts += end as usize * 2;
         self.update_moduli(2);
         Ok(result)
@@ -439,8 +451,14 @@ impl<F: Fancy + Mod2kArithmetic> Mod2kArithmetic for Informer<F> {
         k: Option<u16>,
     ) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
         let result = self.underlying.mod2k_bit_composition(K_i, k)?;
-        self.stats.nmod2k_BC += 1;
         let k = k.unwrap_or(K_i.len() as u16);
+        // For ciphertext count only:
+        let L = K_i
+            .iter()
+            .take(k as usize)
+            .map(|&mod2wire| self.mod_qto2k(mod2wire, None, k).unwrap())
+            .collect::<Vec<_>>();
+        self.stats.nmod2k_BC += 1;
         self.update_moduli2k(k);
         Ok(result)
     }
