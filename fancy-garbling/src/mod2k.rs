@@ -3,8 +3,8 @@
 //! The label vector length is the same as the situation of `WireModQ`
 //! but each element is not mod `p` but mod `p^k`.
 
-use crate::util;
-use crate::{errors::FancyError, HasModulus};
+use crate::errors::FancyError;
+use crate::{util, Fancy};
 use rand::{CryptoRng, Rng, RngCore};
 use scuttlebutt::{Block, AES_HASH};
 
@@ -191,7 +191,10 @@ impl WireMod2k {
     /// Create a new `mod-2^k` wire with the given `k` and digits.
     pub fn new(k: u16, ds: Vec<U>) -> Self {
         if k < 1 || k >= K_MAX {
-            panic!("[WireModpk::new] 2's power k = {} must be [1, {}).", k, K_MAX);
+            panic!(
+                "[WireModpk::new] 2's power k = {} must be [1, {}).",
+                k, K_MAX
+            );
         }
         Self { k, ds }
     }
@@ -213,7 +216,10 @@ impl WireMod2k {
 impl WireLabelMod2k for WireMod2k {
     fn rand<R: CryptoRng + RngCore>(rng: &mut R, k: u16) -> Self {
         if k < 1 || k >= K_MAX {
-            panic!("[WireModpk::rand] 2's power k = {} must be [1, {}).", k, K_MAX);
+            panic!(
+                "[WireModpk::rand] 2's power k = {} must be [1, {}).",
+                k, K_MAX
+            );
         } else {
             let mask = (1 << k) - 1;
             let ds = (0..util::digits_per_u128(2))
@@ -259,7 +265,9 @@ impl WireLabelMod2k for WireMod2k {
     fn cmul_eq(&mut self, c: U) -> &mut Self {
         let q = self.modulus();
         let mask = q - 1;
-        self.ds.iter_mut().for_each(|d| *d = (*d).wrapping_mul(c) & mask);
+        self.ds
+            .iter_mut()
+            .for_each(|d| *d = (*d).wrapping_mul(c) & mask);
         self
     }
 
@@ -277,7 +285,10 @@ impl WireLabelMod2k for WireMod2k {
 
     fn zero(k: u16) -> Self {
         if k < 1 || k >= K_MAX {
-            panic!("[WireModpk::zero] 2's power k = {} must be [1, {}).", k, K_MAX);
+            panic!(
+                "[WireModpk::zero] 2's power k = {} must be [1, {}).",
+                k, K_MAX
+            );
         }
         Self {
             k,
@@ -287,7 +298,10 @@ impl WireLabelMod2k for WireMod2k {
 
     fn mask_2k(&self, k: u16) -> Self {
         if k < 1 || k >= K_MAX {
-            panic!("[WireModpk::mask_2k] 2's power k = {} must be [1, {}).", k, K_MAX);
+            panic!(
+                "[WireModpk::mask_2k] 2's power k = {} must be [1, {}).",
+                k, K_MAX
+            );
         }
         let mask = (1 << k) - 1;
         let ds = self.digits().iter().map(|&d| d & mask).collect();
@@ -413,15 +427,12 @@ impl WireLabelMod2k for WireMod2k {
 /// WireMod2^k arithmetic computation.
 /// Used for intermediate values in the mixed GC.
 /// <https://doi.org/10.1007/978-3-031-58751-1_12>.
-pub trait Mod2kArithmetic {
+pub trait Mod2kArithmetic: Fancy {
     /// The underlying wire datatype created by an object implementing WireMod2^k.
     type ItemMod2k: WireLabelMod2k;
 
     /// Errors which may be thrown by the users of Fancy.
     type ErrorMod2k: std::fmt::Debug + std::fmt::Display + std::convert::From<FancyError>;
-
-    /// WireModQ label type, which is size of one Block.
-    type W: Clone + HasModulus;
 
     /// Modulus change: Project a size of one Block, WireModQ label type `x`.
     /// Resulting wire has modulus `2^k`.
@@ -436,7 +447,7 @@ pub trait Mod2kArithmetic {
     /// * `k_out` - The power of 2 of the modulus `2^k`.
     fn mod_qto2k(
         &mut self,
-        x: &Self::W,
+        x: &Self::Item,
         delta2k: Option<&Self::ItemMod2k>,
         k_out: u16,
     ) -> Result<Self::ItemMod2k, Self::ErrorMod2k>;
@@ -451,17 +462,19 @@ pub trait Mod2kArithmetic {
         &mut self,
         AK: &Self::ItemMod2k,
         end: Option<u16>,
-    ) -> Result<Vec<Self::W>, Self::ErrorMod2k>;
+    ) -> Result<Vec<Self::Item>, Self::ErrorMod2k>;
 
     /// Compose WireMod2 into arithmetic wire. Returns wire in mod 2^k.
     /// Link: <https://doi.org/10.1007/978-3-031-58751-1_12>
     ///
     /// * `K_i` - Vector of WireMod2 to be composed into arithmetic wire.
     /// * `k` - Take first `k` elements of `K_i`, thus output power of 2 of the modulus `2^k`. Default is `K_i.len()`.
+    /// * `c_i` - Optional for linear BC. The constants to be multiplied with the bits.
     fn mod2k_bit_composition(
         &mut self,
-        K_i: &Vec<&Self::W>,
+        K_i: &Vec<&Self::Item>,
         k: Option<u16>,
+        c_i: Option<&Vec<u128>>,
     ) -> Result<Self::ItemMod2k, Self::ErrorMod2k>;
 
     /// Compute `div*_{N}(x)` in <https://doi.org/10.1007/978-3-031-58751-1_12>.
@@ -473,7 +486,8 @@ pub trait Mod2kArithmetic {
     /// * `N` - The divisor, a public constant.
     fn cdiv(&mut self, x: &Self::ItemMod2k, N: U) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
         let k = x.k();
-        if N == 0 { // todo: N == 1, N >= (1 << k)
+        if N == 0 {
+            // todo: N == 1, N >= (1 << k)
             panic!("[Mod2kArithmetic::cdiv] div N = {} not allowed.", N);
         } else {
             let num_bits = |value: u128| -> u16 {
@@ -488,8 +502,9 @@ pub trait Mod2kArithmetic {
             // change x from 2^k to 2^(2k+1) label
             let x_bits = self.mod2k_bit_decomposition(x, None)?;
             let x_2k_1 = self.mod2k_bit_composition(
-                &x_bits.iter().map(|w| w).collect::<Vec<&Self::W>>(),
+                &x_bits.iter().map(|w| w).collect::<Vec<&Self::Item>>(),
                 Some(2 * k + 1),
+                None,
             )?;
 
             let mx = x_2k_1.cmul(m);
@@ -498,28 +513,26 @@ pub trait Mod2kArithmetic {
                 .iter()
                 .skip((k + k_E) as usize)
                 .map(|w| w)
-                .collect::<Vec<&Self::W>>();
-            let r = self.mod2k_bit_composition(&mx_2k_1_div_2_k_k_E, Some(k))?;
+                .collect::<Vec<&Self::Item>>();
+            let r = self.mod2k_bit_composition(&mx_2k_1_div_2_k_k_E, Some(k), None)?;
             Ok(r)
         }
     }
 
     /// Compute `mod*_{N}(x)` in <https://doi.org/10.1007/978-3-031-58751-1_12>.
     /// Not a free operation.
-    /// 
+    ///
     /// mod: `x % N` can be represented as `x - N * div*_{N}(x)` for x < 2^k.
-    /// 
+    ///
     /// * `x` - The dividend WireMod2k label.
     /// * `N` - The modulus, a public constant.
     fn cmod(&mut self, x: &Self::ItemMod2k, N: U) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
         let k = x.k();
         if N == 0 || N == 1 {
             panic!("[Mod2kArithmetic::cmod] mod N = {} not allowed.", N);
-        }
-        else if N >= (1 << k) {
+        } else if N >= (1 << k) {
             Ok(x.clone())
-        } 
-        else {
+        } else {
             let div = self.cdiv(x, N)?;
             let N_div = div.cmul(N);
             let r = x.minus(&N_div);

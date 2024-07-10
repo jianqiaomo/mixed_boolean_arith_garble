@@ -185,12 +185,11 @@ impl<C: AbstractChannel, RNG, OT, Wire: WireLabel> Fancy for Evaluator<C, RNG, O
 
 impl<C: AbstractChannel, RNG, OT, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, RNG, OT, Wire> {
     type ItemMod2k = WireMod2k;
-    type W = Wire;
     type ErrorMod2k = TwopacError;
 
     fn mod_qto2k(
         &mut self,
-        x: &Self::W,
+        x: &Self::Item,
         delta2k: Option<&Self::ItemMod2k>,
         k_out: u16,
     ) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
@@ -201,11 +200,12 @@ impl<C: AbstractChannel, RNG, OT, Wire: WireLabel> Mod2kArithmetic for Evaluator
 
     fn mod2k_bit_composition(
         &mut self,
-        K_i: &Vec<&Self::W>,
+        K_i: &Vec<&Self::Item>,
         k: Option<u16>,
+        c_i: Option<&Vec<u128>>,
     ) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
         self.evaluator
-            .mod2k_bit_composition(K_i, k)
+            .mod2k_bit_composition(K_i, k, c_i)
             .map_err(Self::ErrorMod2k::from)
     }
 
@@ -213,7 +213,7 @@ impl<C: AbstractChannel, RNG, OT, Wire: WireLabel> Mod2kArithmetic for Evaluator
         &mut self,
         AK: &Self::ItemMod2k,
         end: Option<u16>,
-    ) -> Result<Vec<Self::W>, Self::ErrorMod2k> {
+    ) -> Result<Vec<Self::Item>, Self::ErrorMod2k> {
         self.evaluator
             .mod2k_bit_decomposition(AK, end)
             .map_err(Self::ErrorMod2k::from)

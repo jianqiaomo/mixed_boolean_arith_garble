@@ -294,12 +294,11 @@ impl<C: AbstractChannel, Wire: WireLabel + ArithmeticWire> FancyArithmetic for E
 
 impl<C: AbstractChannel, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, Wire> {
     type ItemMod2k = WireMod2k;
-    type W = Wire;
     type ErrorMod2k = EvaluatorError;
 
     fn mod_qto2k(
         &mut self,
-        x: &Self::W,
+        x: &Self::Item,
         _: Option<&Self::ItemMod2k>,
         k_out: u16,
     ) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
@@ -325,8 +324,9 @@ impl<C: AbstractChannel, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, Wire>
 
     fn mod2k_bit_composition(
         &mut self,
-        K_i: &Vec<&Self::W>,
+        K_i: &Vec<&Self::Item>,
         k: Option<u16>,
+        _: Option<&Vec<u128>>,
     ) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
         debug_assert!(K_i.iter().all(|x| x.modulus() == 2));
         let k = k.unwrap_or(K_i.len() as u16); // output WireMod 2^k from k bits
@@ -344,7 +344,7 @@ impl<C: AbstractChannel, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, Wire>
         &mut self,
         AK: &Self::ItemMod2k,
         end: Option<u16>,
-    ) -> Result<Vec<Self::W>, Self::ErrorMod2k> {
+    ) -> Result<Vec<Self::Item>, Self::ErrorMod2k> {
         let k = AK.k();
         let gate_num = self.current_gate();
         let end = end.unwrap_or(k);

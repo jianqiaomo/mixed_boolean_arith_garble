@@ -569,12 +569,11 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
     for Garbler<C, RNG, Wire>
 {
     type ItemMod2k = WireMod2k;
-    type W = Wire;
     type ErrorMod2k = GarblerError;
 
     fn mod_qto2k(
         &mut self,
-        x: &Self::W,
+        x: &Self::Item,
         delta2k: Option<&Self::ItemMod2k>,
         k_out: u16,
     ) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
@@ -623,7 +622,7 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
         &mut self,
         AK: &Self::ItemMod2k,
         end: Option<u16>,
-    ) -> Result<Vec<Self::W>, Self::ErrorMod2k> {
+    ) -> Result<Vec<Self::Item>, Self::ErrorMod2k> {
         let k = AK.k();
         let gate_num = self.current_gate();
         let mod2k_delta = self.delta2k(k);
@@ -683,8 +682,9 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
 
     fn mod2k_bit_composition(
         &mut self,
-        K_i: &Vec<&Self::W>,
+        K_i: &Vec<&Self::Item>,
         k: Option<u16>,
+        c_i: Option<&Vec<u128>>,
     ) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
         debug_assert!(K_i.iter().all(|x| x.modulus() == 2));
         let k = k.unwrap_or(K_i.len() as u16); // output WireMod 2^k from k bits
@@ -696,7 +696,7 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
             .take(k as usize)
             .enumerate()
             .map(|(ith, &mod2wire)| {
-                let delta2k_times_2_pow_i = A.cmul(1 << ith);
+                let delta2k_times_2_pow_i = A.cmul(c_i.map(|c| c[ith]).unwrap_or(1 << ith));
                 self.mod_qto2k(mod2wire, Some(&delta2k_times_2_pow_i), k)
                     .unwrap()
             })

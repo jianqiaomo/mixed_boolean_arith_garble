@@ -4,7 +4,7 @@ use super::{bundle::ArithmeticBundleGadgets, HasModulus};
 use crate::{
     errors::FancyError,
     fancy::bundle::{Bundle, BundleGadgets},
-    util, BinaryBundle, FancyArithmetic, FancyBinary, Mod2kArithmetic, WireLabelMod2k,
+    util, BinaryBundle, FancyArithmetic, FancyBinary, Mod2kArithmetic,
 };
 use itertools::Itertools;
 use std::ops::Deref;
@@ -485,8 +485,8 @@ pub trait MixCrtBinaryGadgets: Mod2kArithmetic + CrtGadgets {
     /// Link: <https://doi.org/10.1007/978-3-031-58751-1_12>
     fn crt_bit_decomposition(
         &mut self,
-        x: &CrtBundle<Self::W>,
-    ) -> Result<BinaryBundle<Self::W>, Self::ErrorMod2k> {
+        x: &CrtBundle<Self::Item>,
+    ) -> Result<BinaryBundle<Self::Item>, Self::ErrorMod2k> {
         let num_bits = |value: u128| -> u16 {
             if value == 0 {
                 return 0;
@@ -502,14 +502,24 @@ pub trait MixCrtBinaryGadgets: Mod2kArithmetic + CrtGadgets {
                 .map(|(&c, &p)| c as u128 * (p as u128 - 1))
                 .fold(0, |acc, x| acc + x),
         ); // potential max bits needed for Σcx
-        let x_2k_c_i_sum = x
+
+        let x_bins = x
             .iter()
-            .zip(c_i.iter())
-            .map(|(x_i, &c)| {
-                let x_2k = self.mod_qto2k(x_i, None, sum_x_bits).unwrap();
-                x_2k.cmul(c)
+            .map(|x_i| self.bit_decomposition(x_i, None).unwrap())
+            .flat_map(|v| v)
+            .collect::<Vec<Self::Item>>();
+        let x_bins = x_bins.iter().map(|x| x).collect::<Vec<&Self::Item>>();
+        let c_i_2_k = c_i
+            .iter()
+            .zip(ps.iter())
+            .flat_map(|(&c, &p)| {
+                let k = num_bits(p as u128 - 1);
+                (0..k).map(move |ith| c << ith)
             })
-            .fold(Self::ItemMod2k::zero(sum_x_bits), |acc, x| acc.plus(&x));
+            .collect::<Vec<u128>>();
+        debug_assert_eq!(x_bins.len(), c_i_2_k.len());
+        let x_2k_c_i_sum = self.mod2k_bit_composition(&x_bins, Some(sum_x_bits), Some(&c_i_2_k))?;
+
         let x_mod_N = self.cmod(&x_2k_c_i_sum, N)?;
         let r = self.mod2k_bit_decomposition(&x_mod_N, Some(k_bits))?;
         Ok(BinaryBundle::new(r))
