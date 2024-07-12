@@ -479,23 +479,36 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel + ArithmeticW
         let p = q2pk(q).0; // let p = q;
         let j = end.unwrap_or(bits_per_modulus(p));
 
-        let K_j = self
-            .encode_many_wires(&vec![0; j as usize], &vec![2; j as usize])?
-            .0;
+        let gate_num = self.current_gate();
+        let g = tweak2(gate_num as u64, 0);
         let A = AK.clone();
         let alpha = A.color();
-        let gate_num = self.current_gate();
         let modp_delta = self.delta(p);
         let mod2_delta = self.delta(2);
+        let K_j_p_alpha = WireMod2k::block_xor_hash_ofb(
+            vec![Block::default(); j as usize],
+            g,
+            A.plus(&modp_delta.cmul((p - alpha) % p)).as_block(),
+        )
+        .iter()
+        .map(|&x| Wire::from_block(x, 2))
+        .collect::<Vec<Wire>>();
+        let K_j = K_j_p_alpha
+            .iter()
+            .enumerate()
+            .map(|(ith, x)| {
+                let beta = ((p - alpha) % p) >> ith & 1;
+                x.minus(&mod2_delta.cmul(beta))
+            })
+            .collect::<Vec<Wire>>();
 
         // C_{j, beta + alpha} =
         //     left: H(A + beta * modp_delta; (id, 0))
         //     XOR
         //     right: K_j(beta_j)
-        let Tab: Vec<Block> = (0..p)
+        let Tab: Vec<Block> = (1..p) // row reduction for 0th
             .flat_map(|beta_th| {
                 let beta = (p - alpha + beta_th) % p;
-                let g = tweak2(gate_num as u64, 0);
                 let left = A.plus(&modp_delta.cmul(beta)).as_block();
                 let right = (0..j)
                     .map(|jth| {
@@ -505,7 +518,7 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel + ArithmeticW
                     .collect::<Vec<Block>>();
                 WireMod2k::block_xor_hash_ofb(right, g, left)
             })
-            .collect::<Vec<Block>>(); // (j * p) blocks
+            .collect::<Vec<Block>>(); // ((p - 1) * j) blocks
 
         for block in Tab.iter() {
             self.channel.write_block(block)?;

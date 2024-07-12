@@ -244,10 +244,10 @@ impl<C: AbstractChannel, Wire: WireLabel + ArithmeticWire> FancyArithmetic for E
         let gate_num = self.current_gate();
         let x_bar = AK.color();
 
-        let mut Tab = Vec::with_capacity((j * p) as usize);
-        for _ in 0..((j * p) as usize) {
+        let mut Tab = vec![Block::default(); (j * p) as usize];
+        for ith in j as usize..((j * p) as usize) {
             let block = self.channel.read_block()?;
-            Tab.push(block);
+            Tab[ith] = block;
         }
 
         // copy Tab from x_bar * j to x_bar * j + j

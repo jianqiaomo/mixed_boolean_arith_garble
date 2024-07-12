@@ -382,7 +382,7 @@ impl<F: FancyArithmetic> FancyArithmetic for Informer<F> {
     ) -> Result<Vec<Self::Item>, Self::Error> {
         let result = self.underlying.bit_decomposition(AK, end)?;
         self.stats.ndecompositions += 1;
-        self.stats.nciphertexts += result.len() * AK.modulus() as usize;
+        self.stats.nciphertexts += result.len() * (AK.modulus() - 1) as usize;
         self.update_moduli(2);
         Ok(result)
     }
