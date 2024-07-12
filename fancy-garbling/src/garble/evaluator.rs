@@ -272,10 +272,10 @@ impl<C: AbstractChannel, Wire: WireLabel + ArithmeticWire> FancyArithmetic for E
         // p is output wire prime that is enough to fit j bits
         let p = p.unwrap_or(a_prime_with_width(j as u16));
 
-        let mut Tab = Vec::with_capacity(j * 2);
-        for _ in 0..(j * 2) {
+        let mut Tab = vec![Block::default(); (j * 2) as usize];
+        for ith in (1..(j * 2)).step_by(2) {
             let block = self.channel.read_block()?;
-            Tab.push(block);
+            Tab[ith as usize] = block;
         }
         let gate_num = self.current_gate();
 
@@ -283,10 +283,9 @@ impl<C: AbstractChannel, Wire: WireLabel + ArithmeticWire> FancyArithmetic for E
             .map(|jth| {
                 let x_bar = K_j[jth].color();
                 let g = tweak2(gate_num as u64, jth as u64);
-                let hash = K_j[jth].hash(g);
-                let L_j = hash ^ Tab[jth * 2 + x_bar as usize];
-                let wire = Wire::from_block(L_j, p);
-                wire
+                let hash = K_j[jth].hashback(g, p);
+                let L_j = Wire::from_block(Tab[jth * 2 + x_bar as usize], p).minus(&hash);
+                L_j
             })
             .fold(Wire::zero(p), |acc, x| acc.plus(&x));
 

@@ -370,7 +370,7 @@ impl<F: FancyArithmetic> FancyArithmetic for Informer<F> {
     ) -> Result<Self::Item, Self::Error> {
         let result = self.underlying.bit_composition(K_j, p)?;
         self.stats.ncompositions += 1;
-        self.stats.nciphertexts += K_j.len() * 2;
+        self.stats.nciphertexts += K_j.len();
         self.update_moduli(p.unwrap_or(crate::util::a_prime_with_width(K_j.len() as u16)));
         Ok(result)
     }

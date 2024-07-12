@@ -534,40 +534,42 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel + ArithmeticW
         // p is output wire prime that is enough to fit j bits
         let p = p.unwrap_or(a_prime_with_width(j as u16));
 
-        let A = self.delta(p); // A is the delta of output WireModp
-        let B = self.encode_wire(0, p).0; // B is the zero wire of output WireModp
-        let mut B_j: Vec<Wire> = (0..j - 1) // Sample random B_j satisfying sum(B_j) mod p = B
-            .map(|_| Wire::rand(&mut self.rng, p))
-            .collect::<Vec<Wire>>();
-        B_j.push(B.minus(&B_j.iter().fold(Wire::zero(p), |acc, x| acc.plus(x))));
-
         let gate_num = self.current_gate();
         let mod2_delta = self.delta(2);
+        let A = self.delta(p); // A is the delta of output WireModp
+        let B_j = K_j
+            .iter()
+            .enumerate()
+            .map(|(jth, &K)| {
+                let alpha = K.color();
+                let g = tweak2(gate_num as u64, jth as u64);
+                let hashK = if alpha == 0 {
+                    K.hashback(g, p)
+                } else {
+                    K.plus(&mod2_delta).hashback(g, p)
+                }
+                .negate()
+                .minus(&A.cmul((1 << jth) as u16 * alpha));
+                hashK
+            })
+            .collect::<Vec<Wire>>();
+        let B = B_j.iter().fold(Wire::zero(p), |acc, x| acc.plus(x)); // B is the zero wire of output WireModp
+
         // C_{j, beta + alpha_j} =
         //     left: H(K_j(beta); (id, j))
         //     XOR
         //     right: B_j + 2^j * beta * A
         let Tab: Vec<Block> = (0..j)
-            .flat_map(|jth| {
+            .map(|jth| {
                 let alpha = K_j[jth].color();
                 let g = tweak2(gate_num as u64, jth as u64);
-                let left = hash_wires(
-                    [
-                        &K_j[jth].plus(&mod2_delta.cmul(alpha)),
-                        &K_j[jth].plus(&mod2_delta.cmul((alpha + 1) & 1)),
-                    ],
-                    g,
-                );
-                let right = (0..2)
-                    .map(|b| {
-                        let A_const = (1 << jth) as u16 * ((alpha + b) & 1);
-                        B_j[jth].plus(&A.cmul(A_const)).as_block()
-                    })
-                    .collect::<Vec<Block>>();
-                left.iter()
-                    .zip(right.iter())
-                    .map(|(&l, &r)| l ^ r)
-                    .collect::<Vec<Block>>()
+                let left = if alpha == 0 {
+                    K_j[jth].plus(&mod2_delta).hashback(g, p)
+                } else {
+                    K_j[jth].hashback(g, p)
+                };
+                let right = B_j[jth].plus(&A.cmul((1 << jth) as u16 * ((alpha + 1) & 1)));
+                left.plus(&right).as_block()
             })
             .collect::<Vec<Block>>();
 
