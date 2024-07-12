@@ -496,14 +496,14 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel + ArithmeticW
             .flat_map(|beta_th| {
                 let beta = (p - alpha + beta_th) % p;
                 let g = tweak2(gate_num as u64, 0);
-                let left = A.plus(&modp_delta.cmul(beta)).hash(g);
+                let left = A.plus(&modp_delta.cmul(beta)).as_block();
                 let right = (0..j)
                     .map(|jth| {
                         let beta_j = (beta >> jth) as u16 & 1;
                         K_j[jth as usize].plus(&mod2_delta.cmul(beta_j)).as_block()
                     })
                     .collect::<Vec<Block>>();
-                right.iter().map(|&r| left ^ r).collect::<Vec<Block>>()
+                WireMod2k::block_xor_hash_ofb(right, g, left)
             })
             .collect::<Vec<Block>>(); // (j * p) blocks
 

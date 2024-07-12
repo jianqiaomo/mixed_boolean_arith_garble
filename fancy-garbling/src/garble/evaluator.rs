@@ -250,19 +250,21 @@ impl<C: AbstractChannel, Wire: WireLabel + ArithmeticWire> FancyArithmetic for E
             Tab.push(block);
         }
 
-        let l_j: Vec<Wire> = (0..j)
-            .map(|jth| {
-                let g = tweak2(gate_num as u64, 0);
-                let left = AK.hash(g);
-                let right = Tab[(x_bar * j + jth) as usize];
-                let result: Block = left ^ right;
-                Wire::from_block(result, 2)
-            })
+        // copy Tab from x_bar * j to x_bar * j + j
+        let CipherTab = Tab[(x_bar * j) as usize..(x_bar * j + j) as usize].to_vec();
+        let g = tweak2(gate_num as u64, 0);
+        let l_j: Vec<Wire> = WireMod2k::block_xor_hash_ofb(CipherTab, g, AK.as_block())
+            .iter()
+            .map(|x| Wire::from_block(*x, 2))
             .collect();
         Ok(l_j)
     }
 
-    fn bit_composition(&mut self, K_j: &Vec<&Wire>, p: Option<u16>) -> Result<Wire, EvaluatorError> {
+    fn bit_composition(
+        &mut self,
+        K_j: &Vec<&Wire>,
+        p: Option<u16>,
+    ) -> Result<Wire, EvaluatorError> {
         // Assume all K_j is mod 2 (Boolean)
         debug_assert!(K_j.iter().all(|x| x.modulus() == 2));
 
@@ -362,7 +364,13 @@ impl<C: AbstractChannel, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, Wire>
 
             // miniBC: use K_i[ith] and mod_qto2k to reconstruct D^(i) or L^(i+1)
             if ith < end - 1 {
-                let D_i = self.mod_qto2k(&lower_l_i, None, std::cmp::max(k as i16 - ith as i16, 1) as u16).unwrap();
+                let D_i = self
+                    .mod_qto2k(
+                        &lower_l_i,
+                        None,
+                        std::cmp::max(k as i16 - ith as i16, 1) as u16,
+                    )
+                    .unwrap();
                 // L^(i+1) = (L^(i) - D^(i)) % 2^{k-i} / 2
                 let temp_L_i_next = L_i.minus(&D_i);
                 L_i = WireMod2k::new(
