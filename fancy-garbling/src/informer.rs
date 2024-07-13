@@ -433,7 +433,7 @@ impl<F: Fancy + Mod2kArithmetic> Mod2kArithmetic for Informer<F> {
             self.update_moduli2k(k_out);
         }
         self.stats.nmod2k_BD += 1;
-        self.stats.nciphertexts += end as usize * 2;
+        self.stats.nciphertexts += end as usize;
         self.update_moduli(2);
         Ok(result)
     }

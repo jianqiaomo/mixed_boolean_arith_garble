@@ -644,34 +644,32 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
         let mod2_delta = self.delta(2);
         let end = end.unwrap_or(k);
 
-        let K_i = self
-            .encode_many_wires(&vec![0; end as usize], &vec![2; end as usize])?
-            .0;
-
         let mut A_i = AK.clone(); // initial: A^(0)
+        let alpha_0 = AK.color() & 1;
+        let mut K_i = vec![if alpha_0 == 0 {
+            Wire::from_block(AK.hash(tweak2(gate_num as u64, 0)), 2)
+        } else {
+            Wire::from_block(AK.plus(&mod2k_delta).hash(tweak2(gate_num as u64, 0)), 2)
+                .minus(&mod2_delta)
+        }];
         for ith in 0..end {
             // Compute and send: C_{i, (beta + alpha^(i)) % 2}
-            let mut C_i_beta_alpha_i_mod_2 = vec![Block::default(); 2];
-            for beta in 0..2u16 {
-                let A_i_plus_beta_delta = if beta == 0 {
-                    A_i.clone()
-                } else {
-                    A_i.plus(&mod2k_delta.mask_2k(std::cmp::max(k as i16 - ith as i16, 1) as u16))
-                        .clone()
-                };
-                let left = A_i_plus_beta_delta.hash(tweak2(gate_num as u64, ith as u64));
-                let right = if beta == 0 {
-                    K_i[ith as usize].as_block()
-                } else {
-                    K_i[ith as usize].plus(&mod2_delta).as_block()
-                };
-                let alpha_i = A_i.color();
-                let C_i_idx = (((alpha_i & 1) as u16 + (beta & 1)) & 1) as usize;
-                C_i_beta_alpha_i_mod_2[C_i_idx] = left ^ right;
-            }
-            for block in C_i_beta_alpha_i_mod_2.iter() {
-                self.channel.write_block(block)?; // 2 Blocks, total will be 2 * k Blocks
-            }
+            let alpha_i = A_i.color();
+            let beta = ((alpha_i & 1) ^ 1) as u16;
+            let A_i_plus_beta_delta = if beta == 0 {
+                A_i.clone()
+            } else {
+                A_i.plus(&mod2k_delta.mask_2k(std::cmp::max(k as i16 - ith as i16, 1) as u16))
+                    .clone()
+            };
+            let left = A_i_plus_beta_delta.hash(tweak2(gate_num as u64, ith as u64));
+            let right = if beta == 0 {
+                K_i[ith as usize].as_block()
+            } else {
+                K_i[ith as usize].plus(&mod2_delta).as_block()
+            };
+            let C_i_beta_alpha_i_mod_2 = left ^ right;
+            self.channel.write_block(&C_i_beta_alpha_i_mod_2)?; // 1 Block, total will be 1 * k Blocks
 
             // miniBC: use K_i[ith] and mod_qto2k for sampling DK^(i) or A^(i+1)
             if ith < end - 1 {
@@ -690,6 +688,21 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
                     std::cmp::max(k as i16 - (ith + 1) as i16, 1) as u16,
                     temp_A_i_next.digits().iter().map(|x| x / 2).collect(),
                 );
+
+                // row reduction to create next K_i
+                let mod2k_delta_i_1 =
+                    mod2k_delta.mask_2k(std::cmp::max(k as i16 - (ith + 1) as i16, 1) as u16);
+                let alpha_i = A_i.color() & 1;
+                K_i.push(if alpha_i == 0 {
+                    Wire::from_block(A_i.hash(tweak2(gate_num as u64, ith as u64 + 1)), 2)
+                } else {
+                    Wire::from_block(
+                        A_i.plus(&mod2k_delta_i_1)
+                            .hash(tweak2(gate_num as u64, ith as u64 + 1)),
+                        2,
+                    )
+                    .minus(&mod2_delta)
+                });
             }
         }
         Ok(K_i)

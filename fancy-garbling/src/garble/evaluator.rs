@@ -353,9 +353,7 @@ impl<C: AbstractChannel, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, Wire>
         let mut L_i = AK.clone(); // initial: L^(0)
         let mut lower_l = Vec::with_capacity(end as usize);
         for ith in 0..end {
-            let Tab_C_i = (0..2)
-                .map(|_| self.channel.read_block())
-                .collect::<Result<Vec<Block>, _>>()?;
+            let Tab_C_i = [Block::default(), self.channel.read_block()?];
             let x_bar = L_i.color();
             let right = Tab_C_i[(x_bar & 1) as usize];
             let left = L_i.hash(tweak2(gate_num as u64, ith as u64));
