@@ -518,9 +518,9 @@ pub trait MixCrtBinaryGadgets: Mod2kArithmetic + CrtGadgets {
             })
             .collect::<Vec<u128>>();
         debug_assert_eq!(x_bins.len(), c_i_2_k.len());
-        let x_2k_c_i_sum = self.mod2k_bit_composition(&x_bins, Some(sum_x_bits), Some(&c_i_2_k))?;
+        let x_2k_c_i_sum = self.mod2k_bit_composition(&x_bins, Some(2 * sum_x_bits + 1), Some(&c_i_2_k))?;
 
-        let x_mod_N = self.cmod(&x_2k_c_i_sum, N)?;
+        let x_mod_N = self.cmod(&x_2k_c_i_sum, N, true)?;
         let r = self.mod2k_bit_decomposition(&x_mod_N, Some(k_bits))?;
         Ok(BinaryBundle::new(r))
     }

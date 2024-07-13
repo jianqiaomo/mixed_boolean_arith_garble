@@ -484,8 +484,24 @@ pub trait Mod2kArithmetic: Fancy {
     ///
     /// * `x` - The dividend WireMod2k label.
     /// * `N` - The divisor, a public constant.
-    fn cdiv(&mut self, x: &Self::ItemMod2k, N: U) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
-        let k = x.k();
+    /// * `limited_x` - Set to `true` only if `x` of mod 2^k is known limited in range
+    /// `[0, ⌊k/2⌋)`, avoid to extend `x` to 2^(2k+1).
+    fn cdiv(
+        &mut self,
+        x: &Self::ItemMod2k,
+        N: U,
+        limited_x: bool,
+    ) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
+        let (k, twok1): (u16, u16) = if limited_x {
+            if x.k() & 1 == 1 {
+                (x.k() / 2, x.k())
+            } else {
+                (x.k() / 2 - 1, x.k())
+            }
+        } else {
+            (x.k(), 2 * x.k() + 1)
+        };
+
         if N == 0 {
             // todo: N == 1, N >= (1 << k)
             panic!("[Mod2kArithmetic::cdiv] div N = {} not allowed.", N);
@@ -499,22 +515,25 @@ pub trait Mod2kArithmetic: Fancy {
             let k_E = num_bits(N);
             let m = (((1 as U) << (k + k_E)) as U + N - 1) / N; // m = ceil(2^(k+k_E) / N), m >= 2^k
 
-            // change x from 2^k to 2^(2k+1) label
-            let x_bits = self.mod2k_bit_decomposition(x, None)?;
-            let x_2k_1 = self.mod2k_bit_composition(
-                &x_bits.iter().map(|w| w).collect::<Vec<&Self::Item>>(),
-                Some(2 * k + 1),
-                None,
-            )?;
-
-            let mx = x_2k_1.cmul(m);
+            let mx = if limited_x {
+                x.cmul(m)
+            } else {
+                // extend x from 2^k to 2^(2k+1) label
+                let x_bits = self.mod2k_bit_decomposition(x, None)?;
+                let x_2k_1 = self.mod2k_bit_composition(
+                    &x_bits.iter().map(|w| w).collect::<Vec<&Self::Item>>(),
+                    Some(twok1),
+                    None,
+                )?;
+                x_2k_1.cmul(m)
+            };
             let mx_2k_1 = self.mod2k_bit_decomposition(&mx, None)?; // end: Some(2 * k + 1).
             let mx_2k_1_div_2_k_k_E = mx_2k_1 // mx mod 2^(2k+1) / 2^(k+k_E)
                 .iter()
                 .skip((k + k_E) as usize)
                 .map(|w| w)
                 .collect::<Vec<&Self::Item>>();
-            let r = self.mod2k_bit_composition(&mx_2k_1_div_2_k_k_E, Some(k), None)?;
+            let r = self.mod2k_bit_composition(&mx_2k_1_div_2_k_k_E, Some(x.k()), None)?;
             Ok(r)
         }
     }
@@ -522,18 +541,25 @@ pub trait Mod2kArithmetic: Fancy {
     /// Compute `mod*_{N}(x)` in <https://doi.org/10.1007/978-3-031-58751-1_12>.
     /// Not a free operation.
     ///
-    /// mod: `x % N` can be represented as `x - N * div*_{N}(x)` for x < 2^k.
+    /// mod: `x % N` can be represented as `x - N * div*_{N}(x)` for x < 2^⌊k/2⌋.
     ///
     /// * `x` - The dividend WireMod2k label.
     /// * `N` - The modulus, a public constant.
-    fn cmod(&mut self, x: &Self::ItemMod2k, N: U) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
+    /// * `limited_x` - Set to `true` only if `x` of mod 2^k is known limited in range
+    /// `[0, ⌊k/2⌋)`, avoid to extend `x` to 2^(2k+1).
+    fn cmod(
+        &mut self,
+        x: &Self::ItemMod2k,
+        N: U,
+        limited_x: bool,
+    ) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
         let k = x.k();
         if N == 0 || N == 1 {
             panic!("[Mod2kArithmetic::cmod] mod N = {} not allowed.", N);
         } else if N >= (1 << k) {
             Ok(x.clone())
         } else {
-            let div = self.cdiv(x, N)?;
+            let div = self.cdiv(x, N, limited_x)?;
             let N_div = div.cmul(N);
             let r = x.minus(&N_div);
             Ok(r)
