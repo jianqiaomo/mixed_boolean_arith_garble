@@ -21,7 +21,7 @@ pub trait FancyInput {
         &mut self,
         values: &[u16],
         moduli: &[u16],
-    ) -> Result<Vec<Self::Item>, Self::Error>;  // twopac::semihonest::garbler.rs, (in_vals, mods)->(Wire Zero or Wire Label)
+    ) -> Result<Vec<Self::Item>, Self::Error>;
 
     /// Receive many values where the input is not known.
     fn receive_many(&mut self, moduli: &[u16]) -> Result<Vec<Self::Item>, Self::Error>;

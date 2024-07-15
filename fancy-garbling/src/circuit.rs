@@ -7,7 +7,7 @@ use crate::{
     errors::{CircuitBuilderError, DummyError, FancyError},
     fancy::{BinaryBundle, CrtBundle, Fancy, FancyInput, HasModulus},
     informer::Informer,
-    FancyArithmetic, FancyBinary,  // FancyReveal,
+    FancyArithmetic, FancyBinary,
 };
 use itertools::Itertools;
 use std::{collections::HashMap, fmt::Display};
@@ -377,7 +377,7 @@ impl<F: FancyArithmetic> EvaluableCircuit<F> for ArithmeticCircuit {
     }
 }
 
-impl<F: FancyBinary> EvaluableCircuit<F> for BinaryCircuit {  // <F: FancyBinary + FancyReveal>
+impl<F: FancyBinary> EvaluableCircuit<F> for BinaryCircuit {
     fn eval(
         &self,
         f: &mut F,
@@ -439,8 +439,8 @@ impl<F: FancyBinary> EvaluableCircuit<F> for BinaryCircuit {  // <F: FancyBinary
             let r = cache[r.ix]
                 .as_ref()
                 .ok_or_else(|| F::Error::from(FancyError::UninitializedValue))?;
-            let out = f.output(r)?;  // let out = f.reveal(r)?;
-            outputs.push(out);  // outputs.push(Some(out));
+            let out = f.output(r)?;
+            outputs.push(out);
         }
         Ok(outputs.into_iter().collect())
     }
