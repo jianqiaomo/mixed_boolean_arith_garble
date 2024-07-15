@@ -117,9 +117,6 @@ pub trait FancyInput {
     }
 
     /// Encode many CRT input bundles.
-    /// Transform the value to CRTs, then encode them to Wires, finally bundle.
-    /// * `values`: Vec<u128> - the values to encode
-    /// * `modulus`: u128 - the crt mods' multiplication, biggest moduli (ring) under a given bitwidth
     fn crt_encode_many(
         &mut self,
         values: &[u128],
@@ -129,7 +126,7 @@ pub trait FancyInput {
         let nmods = mods.len();
         let xs = values
             .iter()
-            .flat_map(|x| util::crt(*x, &mods))  // crt representation of all values packed into a single vector
+            .flat_map(|x| util::crt(*x, &mods))
             .collect_vec();
         let qs = itertools::repeat_n(mods, values.len())
             .flatten()
@@ -137,7 +134,7 @@ pub trait FancyInput {
         let mut wires = self.encode_many(&xs, &qs)?;
         let buns = (0..values.len())
             .map(|_| {
-                let ws = wires.drain(0..nmods).collect_vec();  // drain part of the wires, instead of into_iter
+                let ws = wires.drain(0..nmods).collect_vec();
                 CrtBundle::new(ws)
             })
             .collect_vec();
