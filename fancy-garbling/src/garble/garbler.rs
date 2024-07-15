@@ -471,6 +471,13 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel + ArithmeticW
         }
         Ok(C)
     }
+}
+
+impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithmetic
+    for Garbler<C, RNG, Wire>
+{
+    type ItemMod2k = WireMod2k;
+    type ErrorMod2k = GarblerError;
 
     fn bit_decomposition(&mut self, AK: &Wire, end: Option<u16>) -> Result<Vec<Wire>, Self::Error> {
         let q = AK.modulus();
@@ -578,14 +585,7 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel + ArithmeticW
         }
         Ok(B)
     }
-}
-
-impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithmetic
-    for Garbler<C, RNG, Wire>
-{
-    type ItemMod2k = WireMod2k;
-    type ErrorMod2k = GarblerError;
-
+    
     fn mod_qto2k(
         &mut self,
         x: &Self::Item,

@@ -363,6 +363,24 @@ impl<F: FancyArithmetic> FancyArithmetic for Informer<F> {
         Ok(result)
     }
 
+    fn proj(
+        &mut self,
+        x: &Self::Item,
+        q: u16,
+        tt: Option<Vec<u16>>,
+    ) -> Result<Self::Item, Self::Error> {
+        let result = self.underlying.proj(x, q, tt)?;
+        self.stats.nprojs += 1;
+        self.stats.nciphertexts += x.modulus() as usize - 1;
+        self.update_moduli(q);
+        Ok(result)
+    }
+}
+
+impl<F: Fancy + Mod2kArithmetic> Mod2kArithmetic for Informer<F> {
+    type ItemMod2k = F::ItemMod2k;
+    type ErrorMod2k = F::ErrorMod2k;
+    
     fn bit_composition(
         &mut self,
         K_j: &Vec<&Self::Item>,
@@ -386,24 +404,6 @@ impl<F: FancyArithmetic> FancyArithmetic for Informer<F> {
         self.update_moduli(2);
         Ok(result)
     }
-
-    fn proj(
-        &mut self,
-        x: &Self::Item,
-        q: u16,
-        tt: Option<Vec<u16>>,
-    ) -> Result<Self::Item, Self::Error> {
-        let result = self.underlying.proj(x, q, tt)?;
-        self.stats.nprojs += 1;
-        self.stats.nciphertexts += x.modulus() as usize - 1;
-        self.update_moduli(q);
-        Ok(result)
-    }
-}
-
-impl<F: Fancy + Mod2kArithmetic> Mod2kArithmetic for Informer<F> {
-    type ItemMod2k = F::ItemMod2k;
-    type ErrorMod2k = F::ErrorMod2k;
 
     fn mod_qto2k(
         &mut self,

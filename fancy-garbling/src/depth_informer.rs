@@ -25,10 +25,6 @@ impl HasModulus for DepthItem {
 pub enum DepthError {
     /// Projection is unsupported by the depth informer
     ProjUnsupported,
-    /// Bit composition error.
-    BitCompositionUnsupported,
-    /// Bit decomposition error.
-    BitDecompositionUnsupported,
     /// Error from Fancy library.
     Underlying(FancyError),
 }
@@ -43,8 +39,6 @@ impl std::fmt::Display for DepthError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::ProjUnsupported => writeln!(f, "Projection unsupported"),
-            Self::BitCompositionUnsupported => writeln!(f, "Bit composition unsupported"),
-            Self::BitDecompositionUnsupported => writeln!(f, "Bit decomposition unsupported"),
             Self::Underlying(e) => writeln!(f, "Fancy error: {}", e),
         }
     }
@@ -169,14 +163,6 @@ impl FancyArithmetic for DepthInformer {
             modulus: x.modulus,
             depth: max(x.depth, y.depth) + 1,
         })
-    }
-
-    fn bit_composition(&mut self, _K_j: &Vec<&Self::Item>, _: Option<u16>) -> Result<Self::Item, Self::Error> {
-        Err(DepthError::BitCompositionUnsupported)
-    }
-
-    fn bit_decomposition(&mut self, _AK: &Self::Item, _: Option<u16>) -> Result<Vec<Self::Item>, Self::Error> {
-        Err(DepthError::BitDecompositionUnsupported)
     }
 
     fn proj(

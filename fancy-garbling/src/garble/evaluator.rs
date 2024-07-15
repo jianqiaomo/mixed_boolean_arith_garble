@@ -233,6 +233,11 @@ impl<C: AbstractChannel, Wire: WireLabel + ArithmeticWire> FancyArithmetic for E
             Ok(Wire::from_block(ct ^ x.hash(t), q))
         }
     }
+}
+
+impl<C: AbstractChannel, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, Wire> {
+    type ItemMod2k = WireMod2k;
+    type ErrorMod2k = EvaluatorError;
 
     fn bit_decomposition(&mut self, AK: &Wire, end: Option<u16>) -> Result<Vec<Wire>, Self::Error> {
         let q = AK.modulus();
@@ -291,12 +296,7 @@ impl<C: AbstractChannel, Wire: WireLabel + ArithmeticWire> FancyArithmetic for E
 
         Ok(L)
     }
-}
-
-impl<C: AbstractChannel, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, Wire> {
-    type ItemMod2k = WireMod2k;
-    type ErrorMod2k = EvaluatorError;
-
+    
     fn mod_qto2k(
         &mut self,
         x: &Self::Item,

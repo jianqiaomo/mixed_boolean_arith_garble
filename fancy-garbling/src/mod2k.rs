@@ -434,6 +434,37 @@ pub trait Mod2kArithmetic: Fancy {
     /// Errors which may be thrown by the users of Fancy.
     type ErrorMod2k: std::fmt::Debug + std::fmt::Display + std::convert::From<FancyError>;
 
+    
+    /// Decompose arithmetic wire AK into bits.
+    /// Returns a vector of wires Mod2.
+    /// Link: <https://doi.org/10.1007/978-3-031-58751-1_12>
+    ///
+    /// Assume k=1: for other k, use WireMod2k in mod mod2k instead.
+    /// It requires wire label size to be k*Block instead of Block.
+    ///
+    /// * `AK` - Arithmetic wire to be decomposed, modulus must be prime p.
+    /// * `end` - End index. Range of bits to be decomposed. Default is all bits. Can be used as `X mod 2^end`.
+    fn bit_decomposition(
+        &mut self,
+        AK: &Self::Item,
+        end: Option<u16>,
+    ) -> Result<Vec<Self::Item>, Self::Error>;
+
+    /// Compose WireMod2 into arithmetic wire.
+    /// Returns wire in mod p^1.
+    /// Link: <https://doi.org/10.1007/978-3-031-58751-1_12>
+    ///
+    /// Assume k=1: for other k, use WireMod2k in mod mod2k instead.
+    /// It requires wire label size to be k*Block instead of Block.
+    ///
+    /// * `K_j` - Vector of WireMod2 to be composed into arithmetic wire.
+    /// * `p` - Resulting modulus. Default is auto determined by the length of K_j.
+    fn bit_composition(
+        &mut self,
+        K_j: &Vec<&Self::Item>,
+        p: Option<u16>,
+    ) -> Result<Self::Item, Self::Error>;
+
     /// Modulus change: Project a size of one Block, WireModQ label type `x`.
     /// Resulting wire has modulus `2^k`.
     ///

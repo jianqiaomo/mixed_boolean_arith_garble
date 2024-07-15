@@ -148,6 +148,24 @@ impl<C: AbstractChannel, RNG, OT, Wire: WireLabel + ArithmeticWire> FancyArithme
     fn proj(&mut self, x: &Wire, q: u16, tt: Option<Vec<u16>>) -> Result<Self::Item, Self::Error> {
         self.evaluator.proj(x, q, tt).map_err(Self::Error::from)
     }
+}
+
+impl<C: AbstractChannel, RNG, OT, Wire: WireLabel> Fancy for Evaluator<C, RNG, OT, Wire> {
+    type Item = Wire;
+    type Error = TwopacError;
+
+    fn constant(&mut self, x: u16, q: u16) -> Result<Self::Item, Self::Error> {
+        self.evaluator.constant(x, q).map_err(Self::Error::from)
+    }
+
+    fn output(&mut self, x: &Wire) -> Result<Option<u16>, Self::Error> {
+        self.evaluator.output(x).map_err(Self::Error::from)
+    }
+}
+
+impl<C: AbstractChannel, RNG, OT, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, RNG, OT, Wire> {
+    type ItemMod2k = WireMod2k;
+    type ErrorMod2k = TwopacError;
 
     fn bit_decomposition(
         &mut self,
@@ -168,24 +186,6 @@ impl<C: AbstractChannel, RNG, OT, Wire: WireLabel + ArithmeticWire> FancyArithme
             .bit_composition(K_j, p)
             .map_err(Self::Error::from)
     }
-}
-
-impl<C: AbstractChannel, RNG, OT, Wire: WireLabel> Fancy for Evaluator<C, RNG, OT, Wire> {
-    type Item = Wire;
-    type Error = TwopacError;
-
-    fn constant(&mut self, x: u16, q: u16) -> Result<Self::Item, Self::Error> {
-        self.evaluator.constant(x, q).map_err(Self::Error::from)
-    }
-
-    fn output(&mut self, x: &Wire) -> Result<Option<u16>, Self::Error> {
-        self.evaluator.output(x).map_err(Self::Error::from)
-    }
-}
-
-impl<C: AbstractChannel, RNG, OT, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, RNG, OT, Wire> {
-    type ItemMod2k = WireMod2k;
-    type ErrorMod2k = TwopacError;
 
     fn mod_qto2k(
         &mut self,
