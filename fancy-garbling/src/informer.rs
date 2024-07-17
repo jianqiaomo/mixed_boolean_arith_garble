@@ -13,6 +13,7 @@ pub struct Informer<F: Fancy> {
     /// The underlying fancy object.
     pub underlying: F,
     stats: InformerStats,
+    time_stats: TimeStats,
 }
 
 /// The statistics revealed by the informer.
@@ -227,6 +228,117 @@ impl std::fmt::Display for InformerStats {
     }
 }
 
+/// The time statistics recorded by the informer. Unit is microsecond (us).
+#[derive(Clone, Debug)]
+pub struct TimeStats {
+    nrepeat: usize,
+    treceivem: Vec<f32>,
+    tencodem: Vec<f32>,
+    txor: Vec<f32>,
+    tand: Vec<f32>,
+    tnegate: Vec<f32>,
+    tadds: Vec<f32>,
+    tsubs: Vec<f32>,
+    tcmuls: Vec<f32>,
+    tmuls: Vec<f32>,
+    tprojs: Vec<f32>,
+    tcompositions: Vec<f32>,
+    tdecompositions: Vec<f32>,
+    tmodqto2k: Vec<f32>,
+    tmod2k_BD: Vec<f32>,
+    tmod2k_BC: Vec<f32>,
+}
+
+impl std::fmt::Display for TimeStats {
+    /// Print the time statistics.
+    ///
+    /// ```text
+    /// time info:
+    ///   receive_many total:            0.000 us
+    ///   encode_many total:             0.000 us
+    ///   xor total:                     0.000 us
+    ///   and total:                     0.000 us
+    ///   negate total:                  0.000 us
+    ///   add total:                     0.000 us
+    ///   sub total:                     0.000 us
+    ///   cmul total:                    0.000 us
+    ///   mul total:                     0.000 us
+    ///   proj total:                    0.000 us
+    ///   bit_composition total:         0.000 us
+    ///   bit_decomposition total:       0.000 us
+    ///   mod_qto2k total:               0.000 us
+    ///   mod2k_bit_decomposition total: 0.000 us
+    ///   mod2k_bit_composition total:   0.000 us
+    ///   total:                         0.000 us
+    /// ```
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        writeln!(f, "time info under repeat {} times:", self.nrepeat)?;
+        writeln!(f,"  {:?}", self.treceivem)?;
+        let sum_rec = self.treceivem.iter().sum::<f32>();
+        writeln!(f, "  receive_many total:            {:>8} us", sum_rec)?;
+        writeln!(f,"  {:?}", self.tencodem)?;
+        let sum_enc = self.tencodem.iter().sum::<f32>();
+        writeln!(f, "  encode_many total:             {:>8} us", sum_enc)?;
+        let enc_rec_total = sum_rec + sum_enc;
+        let mut total = 0f32;
+        writeln!(f,"  {:?}", self.txor)?;
+        let sum = self.txor.iter().sum::<f32>();
+        writeln!(f, "  xor total:                     {:>8} us", sum)?;
+        total += sum;
+        writeln!(f,"  {:?}", self.tand)?;
+        let sum = self.tand.iter().sum::<f32>();
+        writeln!(f, "  and total:                     {:>8} us", sum)?;
+        total += sum;
+        writeln!(f,"  {:?}", self.tnegate)?;
+        let sum = self.tnegate.iter().sum::<f32>();
+        writeln!(f, "  negate total:                  {:>8} us", sum)?;
+        total += sum;
+        writeln!(f,"  {:?}", self.tadds)?;
+        let sum = self.tadds.iter().sum::<f32>();
+        writeln!(f, "  add total:                     {:>8} us", sum)?;
+        total += sum;
+        writeln!(f,"  {:?}", self.tsubs)?;
+        let sum = self.tsubs.iter().sum::<f32>();
+        writeln!(f, "  sub total:                     {:>8} us", sum)?;
+        total += sum;
+        writeln!(f,"  {:?}", self.tcmuls)?;
+        let sum = self.tcmuls.iter().sum::<f32>();
+        writeln!(f, "  cmul total:                    {:>8} us", sum)?;
+        total += sum;
+        writeln!(f,"  {:?}", self.tmuls)?;
+        let sum = self.tmuls.iter().sum::<f32>();
+        writeln!(f, "  mul total:                     {:>8} us", sum)?;
+        total += sum;
+        writeln!(f,"  {:?}", self.tprojs)?;
+        let sum = self.tprojs.iter().sum::<f32>();
+        writeln!(f, "  proj total:                    {:>8} us", sum)?;
+        total += sum;
+        writeln!(f,"  {:?}", self.tcompositions)?;
+        let sum = self.tcompositions.iter().sum::<f32>();
+        writeln!(f, "  bit_composition total:         {:>8} us", sum)?;
+        total += sum;
+        writeln!(f,"  {:?}", self.tdecompositions)?;
+        let sum = self.tdecompositions.iter().sum::<f32>();
+        writeln!(f, "  bit_decomposition total:       {:>8} us", sum)?;
+        total += sum;
+        writeln!(f,"  {:?}", self.tmodqto2k)?;
+        let sum = self.tmodqto2k.iter().sum::<f32>();
+        writeln!(f, "  mod_qto2k total:               {:>8} us", sum)?;
+        total += sum;
+        writeln!(f,"  {:?}", self.tmod2k_BD)?;
+        let sum = self.tmod2k_BD.iter().sum::<f32>();
+        writeln!(f, "  mod2k_bit_decomposition total: {:>8} us", sum)?;
+        total += sum;
+        writeln!(f,"  {:?}", self.tmod2k_BC)?;
+        let sum = self.tmod2k_BC.iter().sum::<f32>();
+        writeln!(f, "  mod2k_bit_composition total:   {:>8} us", sum)?;
+        total += sum;
+        writeln!(f, "  total circuit compute:         {:>8} us", total)?;
+        writeln!(f, "  total:                         {:>8} us", enc_rec_total + total)?;
+        Ok(())
+    }
+}
+
 impl<F: Fancy> Informer<F> {
     /// Make a new `Informer`.
     pub fn new(underlying: F) -> Informer<F> {
@@ -251,7 +363,35 @@ impl<F: Fancy> Informer<F> {
                 moduli: HashMap::new(),
                 moduli2k: HashMap::new(),
             },
+            time_stats: TimeStats {
+                nrepeat: 1,
+                treceivem: Vec::new(),
+                tencodem: Vec::new(),
+                txor: Vec::new(),
+                tand: Vec::new(),
+                tnegate: Vec::new(),
+                tadds: Vec::new(),
+                tsubs: Vec::new(),
+                tcmuls: Vec::new(),
+                tmuls: Vec::new(),
+                tprojs: Vec::new(),
+                tcompositions: Vec::new(),
+                tdecompositions: Vec::new(),
+                tmodqto2k: Vec::new(),
+                tmod2k_BD: Vec::new(),
+                tmod2k_BC: Vec::new(),
+            },
         }
+    }
+
+    /// Get the time statistics collected by the `Informer`
+    pub fn time_stats(&self) -> TimeStats {
+        self.time_stats.clone()
+    }
+
+    /// Set the number of repetitions for the time statistics
+    pub fn time_stats_set_repeat(&mut self, nrepeat: usize) {
+        self.time_stats.nrepeat = nrepeat;
     }
 
     /// Get the statistics collected by the `Informer`
@@ -282,7 +422,11 @@ impl<F: Fancy + FancyInput<Item = <F as Fancy>::Item, Error = <F as Fancy>::Erro
             // .garbler_input_moduli
             .evaluator_input_moduli
             .extend(moduli.iter().cloned());
-        self.underlying.receive_many(moduli)
+        let start = SystemTime::now();
+        let r = self.underlying.receive_many(moduli);
+        let elapsed = start.elapsed().unwrap().as_micros();
+        self.time_stats.treceivem.push(elapsed as f32);
+        r
     }
 
     fn encode_many(
@@ -293,20 +437,40 @@ impl<F: Fancy + FancyInput<Item = <F as Fancy>::Item, Error = <F as Fancy>::Erro
         self.stats
             .garbler_input_moduli
             .extend(moduli.iter().cloned());
-        self.underlying.encode_many(values, moduli)
+        let start = SystemTime::now();
+        let r = self.underlying.encode_many(values, moduli);
+        let elapsed = start.elapsed().unwrap().as_micros();
+        self.time_stats.tencodem.push(elapsed as f32);
+        r
     }
 }
 
 impl<F: FancyBinary> FancyBinary for Informer<F> {
     fn xor(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, Self::Error> {
-        let result = self.underlying.xor(x, y)?;
+        let start = SystemTime::now();
+        let result = (0..self.time_stats.nrepeat)
+            .map(|_| self.underlying.xor(x, y))
+            .last()
+            .unwrap()?;
+        let elapsed = start.elapsed().unwrap().as_micros();
+        self.time_stats
+            .txor
+            .push(elapsed as f32 / self.time_stats.nrepeat as f32);
         self.stats.nadds += 1;
         self.update_moduli(x.modulus());
         Ok(result)
     }
 
     fn and(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, Self::Error> {
-        let result = self.underlying.and(x, y)?;
+        let start = SystemTime::now();
+        let result = (0..self.time_stats.nrepeat)
+            .map(|_| self.underlying.and(x, y))
+            .last()
+            .unwrap()?;
+        let elapsed = start.elapsed().unwrap().as_micros();
+        self.time_stats
+            .tand
+            .push(elapsed as f32 / self.time_stats.nrepeat as f32);
         self.stats.nmuls += 1;
         self.stats.nciphertexts += 2;
         self.update_moduli(x.modulus());
@@ -314,7 +478,15 @@ impl<F: FancyBinary> FancyBinary for Informer<F> {
     }
 
     fn negate(&mut self, x: &Self::Item) -> Result<Self::Item, Self::Error> {
-        let result = self.underlying.negate(x)?;
+        let start = SystemTime::now();
+        let result = (0..self.time_stats.nrepeat)
+            .map(|_| self.underlying.negate(x))
+            .last()
+            .unwrap()?;
+        let elapsed = start.elapsed().unwrap().as_micros();
+        self.time_stats
+            .tnegate
+            .push(elapsed as f32 / self.time_stats.nrepeat as f32);
 
         // Technically only the garbler adds: noop for the evaluator
         self.stats.nadds += 1;
@@ -329,21 +501,45 @@ impl<F: FancyArithmetic> FancyArithmetic for Informer<F> {
     // the moduli are equal.
 
     fn add(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, Self::Error> {
-        let result = self.underlying.add(x, y)?;
+        let start = SystemTime::now();
+        let result = (0..self.time_stats.nrepeat)
+            .map(|_| self.underlying.add(x, y))
+            .last()
+            .unwrap()?;
+        let elapsed = start.elapsed().unwrap().as_micros();
+        self.time_stats
+            .tadds
+            .push(elapsed as f32 / self.time_stats.nrepeat as f32);
         self.stats.nadds += 1;
         self.update_moduli(x.modulus());
         Ok(result)
     }
 
     fn sub(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, Self::Error> {
-        let result = self.underlying.sub(x, y)?;
+        let start = SystemTime::now();
+        let result = (0..self.time_stats.nrepeat)
+            .map(|_| self.underlying.sub(x, y))
+            .last()
+            .unwrap()?;
+        let elapsed = start.elapsed().unwrap().as_micros();
+        self.time_stats
+            .tsubs
+            .push(elapsed as f32 / self.time_stats.nrepeat as f32);
         self.stats.nsubs += 1;
         self.update_moduli(x.modulus());
         Ok(result)
     }
 
     fn cmul(&mut self, x: &Self::Item, y: u16) -> Result<Self::Item, Self::Error> {
-        let result = self.underlying.cmul(x, y)?;
+        let start = SystemTime::now();
+        let result = (0..self.time_stats.nrepeat)
+            .map(|_| self.underlying.cmul(x, y))
+            .last()
+            .unwrap()?;
+        let elapsed = start.elapsed().unwrap().as_micros();
+        self.time_stats
+            .tcmuls
+            .push(elapsed as f32 / self.time_stats.nrepeat as f32);
         self.stats.ncmuls += 1;
         self.update_moduli(x.modulus());
         Ok(result)
@@ -353,7 +549,15 @@ impl<F: FancyArithmetic> FancyArithmetic for Informer<F> {
         if x.modulus() < y.modulus() {
             return self.mul(y, x);
         }
-        let result = self.underlying.mul(x, y)?;
+        let start = SystemTime::now();
+        let result = (0..self.time_stats.nrepeat)
+            .map(|_| self.underlying.mul(x, y))
+            .last()
+            .unwrap()?;
+        let elapsed = start.elapsed().unwrap().as_micros();
+        self.time_stats
+            .tmuls
+            .push(elapsed as f32 / self.time_stats.nrepeat as f32);
         self.stats.nmuls += 1;
         self.stats.nciphertexts += x.modulus() as usize + y.modulus() as usize - 2;
         if x.modulus() != y.modulus() {
@@ -370,7 +574,15 @@ impl<F: FancyArithmetic> FancyArithmetic for Informer<F> {
         q: u16,
         tt: Option<Vec<u16>>,
     ) -> Result<Self::Item, Self::Error> {
-        let result = self.underlying.proj(x, q, tt)?;
+        let start = SystemTime::now();
+        let result = (0..self.time_stats.nrepeat)
+            .map(|_| self.underlying.proj(x, q, tt.clone()))
+            .last()
+            .unwrap()?;
+        let elapsed = start.elapsed().unwrap().as_micros();
+        self.time_stats
+            .tprojs
+            .push(elapsed as f32 / self.time_stats.nrepeat as f32);
         self.stats.nprojs += 1;
         self.stats.nciphertexts += x.modulus() as usize - 1;
         self.update_moduli(q);
@@ -387,7 +599,15 @@ impl<F: Fancy + Mod2kArithmetic> Mod2kArithmetic for Informer<F> {
         K_j: &Vec<&Self::Item>,
         p: Option<u16>,
     ) -> Result<Self::Item, Self::Error> {
-        let result = self.underlying.bit_composition(K_j, p)?;
+        let start = SystemTime::now();
+        let result = (0..self.time_stats.nrepeat)
+            .map(|_| self.underlying.bit_composition(K_j, p))
+            .last()
+            .unwrap()?;
+        let elapsed = start.elapsed().unwrap().as_micros();
+        self.time_stats
+            .tcompositions
+            .push(elapsed as f32 / self.time_stats.nrepeat as f32);
         self.stats.ncompositions += 1;
         self.stats.nciphertexts += K_j.len();
         self.update_moduli(p.unwrap_or(crate::util::a_prime_with_width(K_j.len() as u16)));
@@ -399,7 +619,15 @@ impl<F: Fancy + Mod2kArithmetic> Mod2kArithmetic for Informer<F> {
         AK: &Self::Item,
         end: Option<u16>,
     ) -> Result<Vec<Self::Item>, Self::Error> {
-        let result = self.underlying.bit_decomposition(AK, end)?;
+        let start = SystemTime::now();
+        let result = (0..self.time_stats.nrepeat)
+            .map(|_| self.underlying.bit_decomposition(AK, end))
+            .last()
+            .unwrap()?;
+        let elapsed = start.elapsed().unwrap().as_micros();
+        self.time_stats
+            .tdecompositions
+            .push(elapsed as f32 / self.time_stats.nrepeat as f32);
         self.stats.ndecompositions += 1;
         self.stats.nciphertexts += result.len() * (AK.modulus() - 1) as usize;
         self.update_moduli(2);
@@ -411,12 +639,8 @@ impl<F: Fancy + Mod2kArithmetic> Mod2kArithmetic for Informer<F> {
         x: &Self::Item,
         delta2k: Option<&Self::ItemMod2k>,
         k_out: u16,
-        external: bool,
-        external_table: Option<&Vec<Block>>,
-    ) -> Result<(Self::ItemMod2k, Option<Vec<Block>>), Self::ErrorMod2k> {
-        let result = self
-            .underlying
-            .mod_qto2k(x, delta2k, k_out, external, external_table)?;
+    ) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
+        let result = self.underlying.mod_qto2k(x, delta2k, k_out)?;
         self.stats.nmodqto2k += 1;
         self.stats.nciphertexts += k_out as usize * (x.modulus() - 1) as usize;
         self.update_moduli2k(k_out);
@@ -428,7 +652,15 @@ impl<F: Fancy + Mod2kArithmetic> Mod2kArithmetic for Informer<F> {
         AK: &Self::ItemMod2k,
         end: Option<u16>,
     ) -> Result<Vec<Self::Item>, Self::ErrorMod2k> {
-        let result = self.underlying.mod2k_bit_decomposition(AK, end)?;
+        let start = SystemTime::now();
+        let result = (0..self.time_stats.nrepeat)
+            .map(|_| self.underlying.mod2k_bit_decomposition(AK, end))
+            .last()
+            .unwrap()?;
+        let elapsed = start.elapsed().unwrap().as_micros();
+        self.time_stats
+            .tmod2k_BD
+            .push(elapsed as f32 / self.time_stats.nrepeat as f32);
         let k = AK.k();
         let end = end.unwrap_or(k);
         for ith in 0..(end - 1) {
@@ -450,7 +682,15 @@ impl<F: Fancy + Mod2kArithmetic> Mod2kArithmetic for Informer<F> {
         k: Option<u16>,
         c_i: Option<&Vec<u128>>,
     ) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
-        let result = self.underlying.mod2k_bit_composition(K_i, k, c_i)?;
+        let start = SystemTime::now();
+        let result = (0..self.time_stats.nrepeat)
+            .map(|_| self.underlying.mod2k_bit_composition(K_i, k, c_i))
+            .last()
+            .unwrap()?;
+        let elapsed = start.elapsed().unwrap().as_micros();
+        self.time_stats
+            .tmod2k_BC
+            .push(elapsed as f32 / self.time_stats.nrepeat as f32);
         let k = k.unwrap_or(K_i.len() as u16);
         for ith in 0..std::cmp::min(k, K_i.len() as u16) {
             self.stats.nmodqto2k += 1;
