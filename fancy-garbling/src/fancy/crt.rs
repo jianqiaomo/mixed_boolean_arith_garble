@@ -128,6 +128,26 @@ pub trait CrtGadgets:
         self.mul_bundles(x, y).map(CrtBundle)
     }
 
+    /// Multiplex gadget for CRT bundles.
+    fn crt_multiplex(
+        &mut self,
+        b: &Self::Item,
+        x: &CrtBundle<Self::Item>,
+        y: &CrtBundle<Self::Item>,
+    ) -> Result<CrtBundle<Self::Item>, Self::Error> {
+        let notb = self.negate(b)?;
+        x.wires()
+            .iter()
+            .zip(y.wires().iter())
+            .map(|(x, y)| {
+                let xsel = self.mul(&notb, x)?;
+                let ysel = self.mul(b, y)?;
+                self.add(&xsel, &ysel)
+            })
+            .collect::<Result<Vec<Self::Item>, Self::Error>>()
+            .map(CrtBundle::new)
+    }
+
     /// Exponentiate `x` by the constant `c`.
     fn crt_cexp(
         &mut self,
@@ -470,6 +490,17 @@ pub trait CrtGadgets:
 
         Ok(quotient)
     }
+
+    /// Compute the remainder of `x` divided by `y`.
+    fn crt_mod(
+        &mut self,
+        x: &CrtBundle<Self::Item>,
+        y: &CrtBundle<Self::Item>,
+    ) -> Result<CrtBundle<Self::Item>, Self::Error> {
+        let div = self.crt_div(x, y)?;
+        let mul = self.crt_mul(y, &div)?;
+        self.crt_sub(x, &mul)
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -518,7 +549,8 @@ pub trait MixCrtBinaryGadgets: Mod2kArithmetic + CrtGadgets {
             })
             .collect::<Vec<u128>>();
         debug_assert_eq!(x_bins.len(), c_i_2_k.len());
-        let x_2k_c_i_sum = self.mod2k_bit_composition(&x_bins, Some(2 * sum_x_bits + 1), Some(&c_i_2_k))?;
+        let x_2k_c_i_sum =
+            self.mod2k_bit_composition(&x_bins, Some(2 * sum_x_bits + 1), Some(&c_i_2_k))?;
 
         let x_mod_N = self.cmod(&x_2k_c_i_sum, N, true)?;
         let r = self.mod2k_bit_decomposition(&x_mod_N, Some(k_bits))?;
