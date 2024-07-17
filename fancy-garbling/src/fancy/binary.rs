@@ -266,6 +266,24 @@ pub trait BinaryGadgets: FancyBinary + BundleGadgets {
         Ok(qs)
     }
 
+    /// Mod: get remainder x % y
+    fn bin_mod(
+        &mut self,
+        xs: &BinaryBundle<Self::Item>,
+        ys: &BinaryBundle<Self::Item>,
+    ) -> Result<BinaryBundle<Self::Item>, Self::Error> {
+        let qs = self.bin_div(xs, ys)?;
+        let res = BinaryBundle::new(
+            self.bin_mul(ys, &qs)?
+                .wires()
+                .iter()
+                .take(xs.size())
+                .map(|x| x.clone())
+                .collect::<Vec<Self::Item>>(),
+        );
+        self.bin_subtraction(xs, &res).map(|(res, _)| res)
+    }
+
     /// Compute the twos complement of the input bundle (which must be base 2).
     fn bin_twos_complement(
         &mut self,
