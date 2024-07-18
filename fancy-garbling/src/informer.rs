@@ -476,6 +476,7 @@ impl<F: Fancy> Fancy for Informer<F> {
 
 impl<F: Fancy + FancyReveal> FancyReveal for Informer<F> {
     fn reveal(&mut self, x: &Self::Item) -> Result<u16, Self::Error> {
+        self.stats.outputs.push(x.modulus());
         self.underlying.reveal(x)
     }
 }
