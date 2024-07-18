@@ -273,68 +273,72 @@ impl std::fmt::Display for TimeStats {
     /// ```
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         writeln!(f, "time info under repeat {} times:", self.nrepeat)?;
-        writeln!(f,"  {:?}", self.treceivem)?;
+        writeln!(f, "  {:?}", self.treceivem)?;
         let sum_rec = self.treceivem.iter().sum::<f32>();
         writeln!(f, "  receive_many total:            {:>8} us", sum_rec)?;
-        writeln!(f,"  {:?}", self.tencodem)?;
+        writeln!(f, "  {:?}", self.tencodem)?;
         let sum_enc = self.tencodem.iter().sum::<f32>();
         writeln!(f, "  encode_many total:             {:>8} us", sum_enc)?;
         let enc_rec_total = sum_rec + sum_enc;
         let mut total = 0f32;
-        writeln!(f,"  {:?}", self.txor)?;
+        writeln!(f, "  {:?}", self.txor)?;
         let sum = self.txor.iter().sum::<f32>();
         writeln!(f, "  xor total:                     {:>8} us", sum)?;
         total += sum;
-        writeln!(f,"  {:?}", self.tand)?;
+        writeln!(f, "  {:?}", self.tand)?;
         let sum = self.tand.iter().sum::<f32>();
         writeln!(f, "  and total:                     {:>8} us", sum)?;
         total += sum;
-        writeln!(f,"  {:?}", self.tnegate)?;
+        writeln!(f, "  {:?}", self.tnegate)?;
         let sum = self.tnegate.iter().sum::<f32>();
         writeln!(f, "  negate total:                  {:>8} us", sum)?;
         total += sum;
-        writeln!(f,"  {:?}", self.tadds)?;
+        writeln!(f, "  {:?}", self.tadds)?;
         let sum = self.tadds.iter().sum::<f32>();
         writeln!(f, "  add total:                     {:>8} us", sum)?;
         total += sum;
-        writeln!(f,"  {:?}", self.tsubs)?;
+        writeln!(f, "  {:?}", self.tsubs)?;
         let sum = self.tsubs.iter().sum::<f32>();
         writeln!(f, "  sub total:                     {:>8} us", sum)?;
         total += sum;
-        writeln!(f,"  {:?}", self.tcmuls)?;
+        writeln!(f, "  {:?}", self.tcmuls)?;
         let sum = self.tcmuls.iter().sum::<f32>();
         writeln!(f, "  cmul total:                    {:>8} us", sum)?;
         total += sum;
-        writeln!(f,"  {:?}", self.tmuls)?;
+        writeln!(f, "  {:?}", self.tmuls)?;
         let sum = self.tmuls.iter().sum::<f32>();
         writeln!(f, "  mul total:                     {:>8} us", sum)?;
         total += sum;
-        writeln!(f,"  {:?}", self.tprojs)?;
+        writeln!(f, "  {:?}", self.tprojs)?;
         let sum = self.tprojs.iter().sum::<f32>();
         writeln!(f, "  proj total:                    {:>8} us", sum)?;
         total += sum;
-        writeln!(f,"  {:?}", self.tcompositions)?;
+        writeln!(f, "  {:?}", self.tcompositions)?;
         let sum = self.tcompositions.iter().sum::<f32>();
         writeln!(f, "  bit_composition total:         {:>8} us", sum)?;
         total += sum;
-        writeln!(f,"  {:?}", self.tdecompositions)?;
+        writeln!(f, "  {:?}", self.tdecompositions)?;
         let sum = self.tdecompositions.iter().sum::<f32>();
         writeln!(f, "  bit_decomposition total:       {:>8} us", sum)?;
         total += sum;
-        writeln!(f,"  {:?}", self.tmodqto2k)?;
+        writeln!(f, "  {:?}", self.tmodqto2k)?;
         let sum = self.tmodqto2k.iter().sum::<f32>();
         writeln!(f, "  mod_qto2k total:               {:>8} us", sum)?;
         total += sum;
-        writeln!(f,"  {:?}", self.tmod2k_BD)?;
+        writeln!(f, "  {:?}", self.tmod2k_BD)?;
         let sum = self.tmod2k_BD.iter().sum::<f32>();
         writeln!(f, "  mod2k_bit_decomposition total: {:>8} us", sum)?;
         total += sum;
-        writeln!(f,"  {:?}", self.tmod2k_BC)?;
+        writeln!(f, "  {:?}", self.tmod2k_BC)?;
         let sum = self.tmod2k_BC.iter().sum::<f32>();
         writeln!(f, "  mod2k_bit_composition total:   {:>8} us", sum)?;
         total += sum;
         writeln!(f, "  total circuit compute:         {:>8} us", total)?;
-        writeln!(f, "  total:                         {:>8} us", enc_rec_total + total)?;
+        writeln!(
+            f,
+            "  total:                         {:>8} us",
+            enc_rec_total + total
+        )?;
         Ok(())
     }
 }
@@ -640,7 +644,15 @@ impl<F: Fancy + Mod2kArithmetic> Mod2kArithmetic for Informer<F> {
         delta2k: Option<&Self::ItemMod2k>,
         k_out: u16,
     ) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
-        let result = self.underlying.mod_qto2k(x, delta2k, k_out)?;
+        let start = SystemTime::now();
+        let result = (0..self.time_stats.nrepeat)
+            .map(|_| self.underlying.mod_qto2k(x, delta2k, k_out))
+            .last()
+            .unwrap()?;
+        let elapsed = start.elapsed().unwrap().as_micros();
+        self.time_stats
+            .tmodqto2k
+            .push(elapsed as f32 / self.time_stats.nrepeat as f32);
         self.stats.nmodqto2k += 1;
         self.stats.nciphertexts += k_out as usize * (x.modulus() - 1) as usize;
         self.update_moduli2k(k_out);
