@@ -32,9 +32,12 @@ fn profile_function(repeat: usize) {
         "Sub",
         "Pub Mul",
         "Mul",
-        "Div",
-        "Pub Exp",
+        "Div", // PMR
+        "Mod", // PMR
         "Pub Mod",
+        "Mux",
+        "Geq", // PMR
+        "Pub Exp",
         "CRT to Bools",
     ];
 
@@ -81,7 +84,7 @@ fn profile_function(repeat: usize) {
                                 }
                                 _ => panic!("Invalid operation {operate}"),
                             }
-                        },
+                        }
                         "CRT" => {
                             let crt_big_mod = util::modulus_with_width(bitwidth as u32);
                             let xs = gb.crt_encode(5, crt_big_mod).unwrap();
@@ -92,14 +95,22 @@ fn profile_function(repeat: usize) {
                                 "Pub Mul" => BundleType::CRT(gb.crt_cmul(&xs, 3).unwrap()),
                                 "Mul" => BundleType::CRT(gb.crt_mul(&xs, &ys).unwrap()),
                                 "Div" => BundleType::CRT(gb.crt_div(&xs, &ys).unwrap()),
+                                "Mod" => BundleType::CRT(gb.crt_mod(&xs, &ys).unwrap()),
+                                "Mux" => {
+                                    let muxb = gb.encode(1u16, 2).unwrap();
+                                    BundleType::CRT(gb.crt_multiplex(&muxb, &xs, &ys).unwrap())
+                                }
                                 "Pub Exp" => BundleType::CRT(gb.crt_cexp(&xs, 3).unwrap()),
                                 "Pub Mod" => BundleType::CRT(gb.crt_rem(&xs, 3).unwrap()),
+                                "Geq" => BundleType::Binary(BinaryBundle::new(vec![gb
+                                    .crt_geq(&xs, &ys, "100%")
+                                    .unwrap()])),
                                 "CRT to Bools" => {
                                     BundleType::Binary(gb.crt_bit_decomposition(&xs).unwrap())
                                 }
                                 _ => panic!("Invalid operation {operate}"),
                             }
-                        },
+                        }
                         _ => panic!("Invalid bundle method {bund_method}"),
                     };
                     let gb_output_reveal = match gb_output {
@@ -107,8 +118,8 @@ fn profile_function(repeat: usize) {
                         BundleType::CRT(bundle) => gb.crt_reveal(&bundle).unwrap(),
                     };
                     println!("Gb Output 5 op 3: {gb_output_reveal}");
-                    println!("Gb experiment settings: bundle method {bund_method}, bitwidth {bitwidth}, operate {operate}");
-                    // println!("Gb Info: {}", gb.stats());
+                    println!("Gb experiment settings. Bundle {bund_method}. Bitwidth {bitwidth}. Operate {operate}.");
+                    println!("Gb Info: {}", gb.stats());
                     // println!("Gb Time: {}", gb.time_stats());
                 });
 
@@ -141,7 +152,7 @@ fn profile_function(repeat: usize) {
                             "Bools to CRT" => BundleType::CRT(ev.crt_bit_composition(&xs).unwrap()),
                             _ => panic!("Invalid operation {operate}"),
                         }
-                    },
+                    }
                     "CRT" => {
                         let crt_big_mod = util::modulus_with_width(bitwidth as u32);
                         let xs = ev.crt_receive(crt_big_mod).unwrap();
@@ -152,14 +163,22 @@ fn profile_function(repeat: usize) {
                             "Pub Mul" => BundleType::CRT(ev.crt_cmul(&xs, 3).unwrap()),
                             "Mul" => BundleType::CRT(ev.crt_mul(&xs, &ys).unwrap()),
                             "Div" => BundleType::CRT(ev.crt_div(&xs, &ys).unwrap()),
+                            "Mod" => BundleType::CRT(ev.crt_mod(&xs, &ys).unwrap()),
+                            "Mux" => {
+                                let muxb = ev.receive(2).unwrap();
+                                BundleType::CRT(ev.crt_multiplex(&muxb, &xs, &ys).unwrap())
+                            }
                             "Pub Exp" => BundleType::CRT(ev.crt_cexp(&xs, 3).unwrap()),
                             "Pub Mod" => BundleType::CRT(ev.crt_rem(&xs, 3).unwrap()),
+                            "Geq" => BundleType::Binary(BinaryBundle::new(vec![ev
+                                .crt_geq(&xs, &ys, "100%")
+                                .unwrap()])),
                             "CRT to Bools" => {
                                 BundleType::Binary(ev.crt_bit_decomposition(&xs).unwrap())
-                            },
+                            }
                             _ => panic!("Invalid operation {operate}"),
                         }
-                    },
+                    }
                     _ => panic!("Invalid bundle method {bund_method}"),
                 };
                 let ev_output_reveal = match ev_output {
@@ -168,7 +187,7 @@ fn profile_function(repeat: usize) {
                 };
                 handle.join().unwrap();
                 println!("Ev Output 5 op 3: {ev_output_reveal}");
-                println!("Ev experiment settings: bundle method {bund_method}, bitwidth {bitwidth}, operate {operate}");
+                // println!("Ev experiment settings. Bundle {bund_method}. Bitwidth {bitwidth}. Operate {operate}.");
                 // println!("Ev Info: {}", ev.stats());
                 // println!("Ev Time: {}", ev.time_stats());
             }

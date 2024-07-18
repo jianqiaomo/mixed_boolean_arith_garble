@@ -161,7 +161,7 @@ impl std::fmt::Display for InformerStats {
 
         writeln!(
             f,
-            "  garbler inputs:     {:16} // communication: {:.2} Kb",
+            "  garbler inputs:     {:16} // communication: {:.3} Kb",
             self.num_garbler_inputs(),
             comm
         )?;
@@ -175,7 +175,7 @@ impl std::fmt::Display for InformerStats {
 
         writeln!(
             f,
-            "  evaluator inputs:   {:16} // communication: {:.2} Kb",
+            "  evaluator inputs:   {:16} // communication: {:.3} Kb",
             self.num_evaluator_inputs(),
             comm
         )?;
@@ -185,7 +185,7 @@ impl std::fmt::Display for InformerStats {
         writeln!(f, "  outputs:            {:16}", self.num_outputs())?;
         writeln!(
             f,
-            "  output ciphertexts: {:16} // communication: {:.2} Kb",
+            "  output ciphertexts: {:16} // communication: {:.3} Kb",
             self.num_output_ciphertexts(),
             comm
         )?;
@@ -194,7 +194,7 @@ impl std::fmt::Display for InformerStats {
 
         writeln!(
             f,
-            "  constants:          {:16} // communication: {:.2} Kb",
+            "  constants:          {:16} // communication: {:.3} Kb",
             self.num_consts(),
             comm
         )?;
@@ -215,13 +215,13 @@ impl std::fmt::Display for InformerStats {
         let mb = kb / 1000.0;
         writeln!(
             f,
-            "  ciphertexts:        {:16} // communication: {:.2} Mb ({:.2} Kb)",
+            "  ciphertexts:        {:16} // communication: {:.3} Mb ({:.3} Kb)",
             cs, mb, kb
         )?;
         total += kb;
 
         let mb = total / 1000.0;
-        writeln!(f, "  total communication:  {:11.2} Mb", mb)?;
+        writeln!(f, "  total communication:  {:11.3} Mb", mb)?;
         writeln!(f, "  wire moduli: {:#?}", self.moduli)?;
         writeln!(f, "  wire moduli 2^k: {:#?}", self.moduli2k)?;
         Ok(())
