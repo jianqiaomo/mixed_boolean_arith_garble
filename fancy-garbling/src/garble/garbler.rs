@@ -3,6 +3,7 @@ use crate::{
     errors::{FancyError, GarblerError},
     fancy::{BinaryBundle, CrtBundle, Fancy, FancyReveal},
     hash_wires,
+    informer::GLOBAL_CHANNEL_TIME_GB,
     mod2k::{Mod2kArithmetic, WireLabelMod2k, WireMod2k},
     util::{a_prime_with_width, bits_per_modulus, output_tweak, q2pk, tweak, tweak2, RngExt},
     AllWire, ArithmeticWire, FancyArithmetic, FancyBinary, HasModulus, WireLabel, WireMod2,
@@ -11,10 +12,45 @@ use rand::{CryptoRng, RngCore};
 use scuttlebutt::{AbstractChannel, Block};
 #[cfg(feature = "serde")]
 use serde::de::DeserializeOwned;
-use std::collections::HashMap;
+use std::{collections::HashMap, time::SystemTime};
 use subtle::ConditionallySelectable;
 
 use super::security_warning::warn_proj;
+
+/// Time the channel writing operation. Timing is done in microseconds.
+/// Result is added to the global channel time for garbler.
+///
+/// # Example
+/// ```
+/// time_write_block!(self, {
+///     self.channel.write_block(&gate0)?;
+///     self.channel.write_block(&gate1)?;
+/// });
+/// ```
+/// Replacing
+/// ```
+/// self.channel.write_block(&gate0)?;
+/// self.channel.write_block(&gate1)?;
+/// ```
+macro_rules! time_write_block {
+    ($self:expr, $code:block) => {{
+        let start_channel = SystemTime::now();
+
+        // Execute the code block and handle the result
+        let result = {
+            let code_result = { $code };
+            code_result
+        };
+
+        let elapsed_channel = start_channel.elapsed().unwrap().as_micros();
+        GLOBAL_CHANNEL_TIME_GB.fetch_add(
+            elapsed_channel as usize,
+            std::sync::atomic::Ordering::Relaxed,
+        );
+
+        result
+    }};
+}
 
 /// Streams garbled circuit ciphertexts through a callback.
 pub struct Garbler<C, RNG, Wire> {
@@ -223,8 +259,10 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng> FancyBinary for Garbler<C, RN
     fn and(&mut self, A: &Self::Item, B: &Self::Item) -> Result<Self::Item, Self::Error> {
         let delta = self.delta(2);
         let (gate0, gate1, C) = self.garble_and_gate(A, B, &delta);
-        self.channel.write_block(&gate0)?;
-        self.channel.write_block(&gate1)?;
+        time_write_block!(self, {
+            self.channel.write_block(&gate0)?;
+            self.channel.write_block(&gate1)?;
+        });
         Ok(C)
     }
 
@@ -268,8 +306,10 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng> FancyBinary for Garbler<C, RN
             (x, y, self.delta(2))
         {
             let (gate0, gate1, C) = self.garble_and_gate(A, B, delta);
-            self.channel.write_block(&gate0)?;
-            self.channel.write_block(&gate1)?;
+            time_write_block!(self, {
+                self.channel.write_block(&gate0)?;
+                self.channel.write_block(&gate1)?;
+            });
             return Ok(AllWire::Mod2(C));
         }
         // If we got here, one of the wires isn't binary
@@ -412,9 +452,11 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel + ArithmeticW
             }
         }
 
-        for block in gate.iter() {
-            self.channel.write_block(block)?;
-        }
+        time_write_block!(self, {
+            for block in gate.iter() {
+                self.channel.write_block(block)?;
+            }
+        });
         Ok(X.plus_mov(&Y))
     }
 
@@ -466,9 +508,11 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel + ArithmeticW
             gate[ix - 1] = ct;
         }
 
-        for block in gate.iter() {
-            self.channel.write_block(block)?;
-        }
+        time_write_block!(self, {
+            for block in gate.iter() {
+                self.channel.write_block(block)?;
+            }
+        });
         Ok(C)
     }
 }
@@ -507,10 +551,43 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel + ArithmeticW
             .iter()
             .enumerate()
             .map(|(jth, &K)| {
-                let tab: Vec<u16> = (0..2).map(|x| (x << jth) % p).collect();
-                self.proj(K, p, Some(tab)).unwrap()
+                let alpha = K.color();
+                let g = tweak2(gate_num as u64, jth as u64);
+                let hashK = if alpha == 0 {
+                    K.hashback(g, p)
+                } else {
+                    K.plus(&mod2_delta).hashback(g, p)
+                }
+                .negate()
+                .minus(&A.cmul((1 << jth) as u16 * alpha));
+                hashK
             })
-            .fold(Wire::zero(p), |acc, x| acc.plus(&x));
+            .collect::<Vec<Wire>>();
+        let B = B_j.iter().fold(Wire::zero(p), |acc, x| acc.plus(x)); // B is the zero wire of output WireModp
+
+        // C_{j, beta + alpha_j} =
+        //     left: H(K_j(beta); (id, j))
+        //     XOR
+        //     right: B_j + 2^j * beta * A
+        let Tab: Vec<Block> = K_j
+            .iter()
+            .enumerate()
+            .map(|(jth, &K)| {
+                let alpha = K.color();
+                let g = tweak2(gate_num as u64, jth as u64);
+                let left = if alpha == 0 {
+                    K.plus(&mod2_delta).hashback(g, p)
+                } else {
+                    K.hashback(g, p)
+                };
+                let right = B_j[jth].plus(&A.cmul((1 << jth) as u16 * ((alpha + 1) & 1)));
+                left.plus(&right).as_block()
+            })
+            .collect();
+
+        for block in Tab.iter() {
+            self.channel.write_block(block)?;
+        }
         Ok(B)
     }
 
@@ -553,9 +630,11 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel + ArithmeticW
         if external {
             Ok((C, Option::from(gate)))
         } else {
-            for block in gate.iter() {
-                self.channel.write_block(block)?; // (q_in - 1) * k_out Blocks
-            }
+            time_write_block!(self, {
+                for block in gate.iter() {
+                    self.channel.write_block(block)?; // (q_in - 1) * k_out Blocks
+                }
+            });
             Ok((C, None))
         }
     }
@@ -603,7 +682,6 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel + ArithmeticW
                     K_i_new.plus(&mod2_delta).as_block()
                 };
                 let C_i_beta_alpha_i_mod_2 = left ^ right;
-                // self.channel.write_block(&C_i_beta_alpha_i_mod_2)?; // 1 Block, total will be 1 * k Blocks
                 Tab.push(C_i_beta_alpha_i_mod_2); // 1 Block, total will be 1 * k Blocks
 
                 let K_i_last = K_i_new.clone();
@@ -646,9 +724,11 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel + ArithmeticW
                 Ok(K_i_last)
             })
             .collect();
-        for block in Tab.iter() {
-            self.channel.write_block(block)?;
-        }
+        time_write_block!(self, {
+            for block in Tab.iter() {
+                self.channel.write_block(block)?;
+            }
+        });
         K_i
     }
 
@@ -678,9 +758,11 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel + ArithmeticW
             })
             .fold(WireMod2k::zero(k), |acc, mod2kwire| acc.plus(&mod2kwire));
 
-        for block in Tab.iter() {
-            self.channel.write_block(block)?;
-        }
+        time_write_block!(self, {
+            for block in Tab.iter() {
+                self.channel.write_block(block)?;
+            }
+        });
 
         Ok(B)
     }

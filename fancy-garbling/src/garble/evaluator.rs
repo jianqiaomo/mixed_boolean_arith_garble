@@ -1,19 +1,55 @@
-use std::marker::PhantomData;
-
 use crate::{
     check_binary,
     errors::{EvaluatorError, FancyError},
     fancy::{Fancy, FancyReveal},
     hash_wires,
+    informer::GLOBAL_CHANNEL_TIME_EV,
     mod2k::{Mod2kArithmetic, WireLabelMod2k, WireMod2k},
     util::{a_prime_with_width, bits_per_modulus, output_tweak, q2pk, tweak, tweak2},
     wire::WireLabel,
     AllWire, ArithmeticWire, FancyArithmetic, FancyBinary, HasModulus, WireMod2,
 };
 use scuttlebutt::{AbstractChannel, Block};
+use std::{marker::PhantomData, time::SystemTime};
 use subtle::ConditionallySelectable;
 
 use super::security_warning::warn_proj;
+
+/// Time the channel writing operation. Timing is done in microseconds.
+/// Result is added to the global channel time for evaluator.
+///
+/// # Example
+/// ```
+/// let (gate0, gate1) = time_read_block!(self, {
+///     let gate0 = self.channel.read_block()?;
+///     let gate1 = self.channel.read_block()?;
+///     (gate0, gate1)
+/// });
+/// ```
+/// Replacing
+/// ```
+/// let gate0 = self.channel.read_block()?;
+/// let gate1 = self.channel.read_block()?;
+/// ```
+macro_rules! time_read_block {
+    ($self:expr, $code:block) => {{
+        let start_channel = SystemTime::now();
+
+        // Execute the code block and handle the result
+        let result = {
+            let code_result = { $code };
+            code_result
+        };
+
+        let elapsed_channel = start_channel.elapsed().unwrap().as_micros();
+        GLOBAL_CHANNEL_TIME_EV.fetch_add(
+            elapsed_channel as usize,
+            std::sync::atomic::Ordering::Relaxed,
+        );
+
+        result
+    }};
+}
 
 /// Streaming evaluator using a callback to receive ciphertexts as needed.
 ///
@@ -133,8 +169,11 @@ impl<C: AbstractChannel> FancyBinary for Evaluator<C, AllWire> {
 
     fn and(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, Self::Error> {
         if let (AllWire::Mod2(ref A), AllWire::Mod2(ref B)) = (x, y) {
-            let gate0 = self.channel.read_block()?;
-            let gate1 = self.channel.read_block()?;
+            let (gate0, gate1) = time_read_block!(self, {
+                let gate0 = self.channel.read_block()?;
+                let gate1 = self.channel.read_block()?;
+                (gate0, gate1)
+            });
             return Ok(AllWire::Mod2(self.evaluate_and_gate(A, B, &gate0, &gate1)));
         }
 
@@ -174,13 +213,14 @@ impl<C: AbstractChannel, Wire: WireLabel + ArithmeticWire> FancyArithmetic for E
         let qb = B.modulus();
         let unequal = q != qb;
         let ngates = q as usize + qb as usize - 2 + unequal as usize;
-        let mut gate = Vec::with_capacity(ngates);
-        {
+        let gate = time_read_block!(self, {
+            let mut gate_ = Vec::with_capacity(ngates);
             for _ in 0..ngates {
                 let block = self.channel.read_block()?;
-                gate.push(block);
+                gate_.push(block);
             }
-        }
+            gate_
+        });
         let gate_num = self.current_gate();
         let g = tweak2(gate_num as u64, 0);
 
@@ -220,11 +260,14 @@ impl<C: AbstractChannel, Wire: WireLabel + ArithmeticWire> FancyArithmetic for E
     fn proj(&mut self, x: &Wire, q: u16, _: Option<Vec<u16>>) -> Result<Wire, EvaluatorError> {
         warn_proj();
         let ngates = (x.modulus() - 1) as usize;
-        let mut gate = Vec::with_capacity(ngates);
-        for _ in 0..ngates {
-            let block = self.channel.read_block()?;
-            gate.push(block);
-        }
+        let gate = time_read_block!(self, {
+            let mut gate_ = Vec::with_capacity(ngates);
+            for _ in 0..ngates {
+                let block = self.channel.read_block()?;
+                gate_.push(block);
+            }
+            gate_
+        });
         let t = tweak(self.current_gate());
         if x.color() == 0 {
             Ok(x.hashback(t, q))
@@ -264,11 +307,20 @@ impl<C: AbstractChannel, Wire: WireLabel + ArithmeticWire> Mod2kArithmetic for E
         // p is output wire prime that is enough to fit j bits
         let p = p.unwrap_or(a_prime_with_width(j as u16));
 
-        let L = K_j
-            .iter()
-            .map(|K| {
-                // let tab: Vec<u16> = (0..2).map(|x| (x << jth) % p).collect();
-                self.proj(K, p, None).unwrap()
+        let mut Tab = vec![Block::default(); (j * 2) as usize];
+        for ith in (1..(j * 2)).step_by(2) {
+            let block = self.channel.read_block()?;
+            Tab[ith as usize] = block;
+        }
+        let gate_num = self.current_gate();
+
+        let L: Wire = (0..j)
+            .map(|jth| {
+                let x_bar = K_j[jth].color();
+                let g = tweak2(gate_num as u64, jth as u64);
+                let hash = K_j[jth].hashback(g, p);
+                let L_j = Wire::from_block(Tab[jth * 2 + x_bar as usize], p).minus(&hash);
+                L_j
             })
             .fold(Wire::zero(p), |acc, x| acc.plus(&x));
         Ok(L)
@@ -291,7 +343,7 @@ impl<C: AbstractChannel, Wire: WireLabel + ArithmeticWire> Mod2kArithmetic for E
                 if external {
                     blocks.push(external_table.unwrap()[nth * k as usize + ith as usize]);
                 } else {
-                    blocks.push(self.channel.read_block()?);
+                    blocks.push(time_read_block!(self, { self.channel.read_block()? }));
                 }
             }
             gate.push(blocks);
@@ -316,9 +368,11 @@ impl<C: AbstractChannel, Wire: WireLabel + ArithmeticWire> Mod2kArithmetic for E
         debug_assert!(K_i.iter().all(|x| x.modulus() == 2));
         let k = k.unwrap_or(K_i.len() as u16); // output WireMod 2^k from k bits
 
-        let Tab = (0..k as usize * std::cmp::min(k as usize, K_i.len()))
-            .map(|_| self.channel.read_block().unwrap())
-            .collect::<Vec<Block>>();
+        let Tab = time_read_block!(self, {
+            (0..k as usize * std::cmp::min(k as usize, K_i.len()))
+                .map(|_| self.channel.read_block().unwrap())
+                .collect::<Vec<Block>>()
+        });
 
         // mod 2 to 2^k for each bit, then add them for free
         let L = K_i
@@ -347,12 +401,14 @@ impl<C: AbstractChannel, Wire: WireLabel + ArithmeticWire> Mod2kArithmetic for E
     ) -> Result<Vec<Self::Item>, Self::ErrorMod2k> {
         let k = AK.k();
         let end = end.unwrap_or(k);
-        let Tab: Vec<Block> = (0..end as usize
-            + (0..end - 1)
-                .map(|ith| std::cmp::max(k - ith, 1) as usize)
-                .sum::<usize>())
-            .map(|_| self.channel.read_block().unwrap())
-            .collect();
+        let Tab: Vec<Block> = time_read_block!(self, {
+            (0..end as usize
+                + (0..end - 1)
+                    .map(|ith| std::cmp::max(k - ith, 1) as usize)
+                    .sum::<usize>())
+                .map(|_| self.channel.read_block().unwrap())
+                .collect::<Vec<Block>>()
+        });
         let mut Tab_idx: usize = 0;
         let gate_num = self.current_gate();
 
