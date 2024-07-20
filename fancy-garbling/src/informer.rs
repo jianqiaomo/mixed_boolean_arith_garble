@@ -421,18 +421,9 @@ impl<F: Fancy + Mod2kArithmetic> Mod2kArithmetic for Informer<F> {
         external: bool,
         external_table: Option<&Vec<Block>>,
     ) -> Result<(Self::ItemMod2k, Option<Vec<Block>>), Self::ErrorMod2k> {
-        let start = SystemTime::now();
-        let result = (0..self.time_stats.nrepeat)
-            .map(|_| {
-                self.underlying
-                    .mod_qto2k(x, delta2k, k_out, external, external_table)
-            })
-            .last()
-            .unwrap()?;
-        let elapsed = start.elapsed().unwrap().as_micros();
-        self.time_stats
-            .tmodqto2k
-            .push(elapsed as f32 / self.time_stats.nrepeat as f32);
+        let result = self
+            .underlying
+            .mod_qto2k(x, delta2k, k_out, external, external_table)?;
         self.stats.nmodqto2k += 1;
         self.stats.nciphertexts += k_out as usize * (x.modulus() - 1) as usize;
         self.update_moduli2k(k_out);
