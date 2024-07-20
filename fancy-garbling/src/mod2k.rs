@@ -476,12 +476,17 @@ pub trait Mod2kArithmetic: Fancy {
     /// * `delta2k` - (Only required in BC) WireMod 2^k label type delta. Ignore for evaluator. Ignore
     /// for general proj q to 2^k.
     /// * `k_out` - The power of 2 of the modulus `2^k`.
+    /// * `external` - Set to `true` if using external communication for garbled table. External communication
+    /// outputs garbler garbled table, and input evaluator garbled table.
+    /// * `external_table` - External garbled table for evaluator garbled circuit.
     fn mod_qto2k(
         &mut self,
         x: &Self::Item,
         delta2k: Option<&Self::ItemMod2k>,
         k_out: u16,
-    ) -> Result<Self::ItemMod2k, Self::ErrorMod2k>;
+        external: bool,
+        external_table: Option<&Vec<Block>>,
+    ) -> Result<(Self::ItemMod2k, Option<Vec<Block>>), Self::ErrorMod2k>;
 
     /// Decompose arithmetic wire mod `2^k` AK into bits.
     /// Returns a vector of wires Mod2.

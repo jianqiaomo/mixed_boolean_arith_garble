@@ -175,46 +175,6 @@ pub fn u128_from_bits(bs: &[u16]) -> u128 {
     x
 }
 
-/// ⌈log2(q)⌉: Determine the number of bits needed to represent a u16 modulus.
-pub fn bits_per_modulus(q: u16) -> u16 {
-    if q > 1 {
-        if q == 2 {
-            1
-        } else if q <= 4 {
-            2
-        } else if q <= 8 {
-            3
-        } else if q <= 16 {
-            4
-        } else if q <= 32 {
-            5
-        } else if q <= 64 {
-            6
-        } else if q <= 128 {
-            7
-        } else if q <= 256 {
-            8
-        } else if q <= 512 {
-            9
-        } else {
-            let mod_ring_upper_bound = q - 1;
-            let mut num_bits = 16;
-            while num_bits > 0 {
-                if (mod_ring_upper_bound >> (num_bits - 1)) & 1 == 1 {
-                    break;
-                }
-                num_bits -= 1;
-            }
-            num_bits
-        }
-    } else {
-        panic!(
-            "[util::bits_per_modulus] Modulus must be at least 2. Got {}",
-            q
-        );
-    }
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // primes & crt
 
@@ -266,42 +226,6 @@ pub fn crt_inv(xs: &[u16], ps: &[u16]) -> u128 {
 /// Compute the value `x` given a composite CRT modulus provided by `xs`.
 pub fn crt_inv_factor(xs: &[u16], q: u128) -> u128 {
     crt_inv(xs, &factor(q))
-}
-
-/// Get the constants `c_i` list for the CRT inversion, as the
-/// original `value = Σ (c_i * x_i) mod N`.
-/// And determine how many bits are needed to represent the max value.
-/// 
-/// @param `ps`: list of primes.
-/// 
-/// @return: constants `c_i` list for the CRT inversion, and the number of bits of `N`.
-///
-/// Ref: <https://www.ctfrecipes.com/cryptography/general-knowledge/maths/modular-arithmetic/chinese-remainder-theorem>,
-/// <https://doi.org/10.1007/978-3-031-58751-1_12>.
-pub fn crt_inv_constants(ps: &[u16]) -> (Vec<u128>, u16) {
-    if !ps.iter().all(|&p| PRIMES.contains(&p)) {
-        panic!(
-            "util: CRT supports for prime in the PRIMES list, but got {:?}",
-            ps
-        );
-    }
-    let N = ps.iter().fold(1, |acc, &x| x as i128 * acc);
-    let bits_required = |value: u128| -> u16 {
-        if value == 0 {
-            return 0;
-        }
-        (128 - value.leading_zeros()) as u16
-    };
-    (
-        ps.iter()
-            .map(|&p| {
-                let p = p as i128;
-                let E_i = N / p;
-                E_i as u128 * inv(E_i, p) as u128
-            })
-            .collect::<Vec<u128>>(),
-        bits_required(N as u128),
-    )
 }
 
 /// Invert inp_a mod inp_b.
@@ -422,70 +346,6 @@ pub fn is_power_of_2(x: u16) -> bool {
     (x & (x - 1)) == 0
 }
 
-/// Get p and k from q assuming `q = p^k`.
-/// p is from PRIMES list.
-///
-/// Returns `(p, k)`
-pub fn q2pk(q: u16) -> (u16, u16) {
-    base_q2pk(q, &PRIMES)
-}
-
-/// Get p and k from q assuming `q = p^k`.
-/// p is from available_primes list.
-///
-/// Returns `(p, k)`
-pub fn base_q2pk(q: u16, available_primes: &[u16]) -> (u16, u16) {
-    if q < 2 {
-        panic!("util: Modulus must be at least 2. Got {}", q);
-    } else if available_primes.contains(&q) {
-        return (q, 1);
-    } else {
-        for &p in available_primes.iter() {
-            if q % p == 0 {
-                // p is a prime factor of q
-                let mut k = 0;
-                let mut power = 1u16;
-
-                while power < q {
-                    power *= p;
-                    k += 1;
-                }
-
-                if power == q {
-                    debug_assert_eq!(q, p.pow(k as u32));
-                    return (p, k);
-                }
-            }
-        }
-        panic!(
-            "util: Modulus q={} must be a prime power where prime is from prime list {}",
-            q,
-            available_primes
-                .iter()
-                .map(|&x| x.to_string())
-                .collect::<Vec<String>>()
-                .join(", ")
-        );
-    }
-}
-
-/// Find a prime that is enough to fit n bits
-pub fn a_prime_with_width(n: u16) -> u16 {
-    base_a_prime_with_width(n, &PRIMES)
-}
-
-/// Find one prime that is enough to fit n bits, from available_primes list.
-pub fn base_a_prime_with_width(n: u16, available_primes: &[u16]) -> u16 {
-    available_primes
-        .iter()
-        .find(|&&x| (x >> n as u16) > 0)
-        .expect(&format!(
-            "[FancyArithmetic::bit_composition] No prime available to fit {} bits value.",
-            n
-        ))
-        .clone()
-}
-
 /// Generate deltas ahead of time for the Garbler.
 pub fn generate_deltas<Wire: WireLabel>(primes: &[u16]) -> HashMap<u16, Wire> {
     let mut deltas = HashMap::new();
@@ -572,6 +432,155 @@ pub trait RngExt: rand::Rng + Sized {
 }
 
 impl<R: rand::Rng + Sized> RngExt for R {}
+
+////////////////////////////////////////////////////////////////////////////////
+// mixed GC
+
+/// Get p and k from q assuming `q = p^k`.
+/// p is from PRIMES list.
+///
+/// Returns `(p, k)`
+pub fn q2pk(q: u16) -> (u16, u16) {
+    base_q2pk(q, &PRIMES)
+}
+
+/// Get p and k from q assuming `q = p^k`.
+/// p is from available_primes list.
+///
+/// Returns `(p, k)`
+pub fn base_q2pk(q: u16, available_primes: &[u16]) -> (u16, u16) {
+    if q < 2 {
+        panic!("util: Modulus must be at least 2. Got {}", q);
+    } else if available_primes.contains(&q) {
+        return (q, 1);
+    } else {
+        for &p in available_primes.iter() {
+            if q % p == 0 {
+                // p is a prime factor of q
+                let mut k = 0;
+                let mut power = 1u16;
+
+                while power < q {
+                    power *= p;
+                    k += 1;
+                }
+
+                if power == q {
+                    debug_assert_eq!(q, p.pow(k as u32));
+                    return (p, k);
+                }
+            }
+        }
+        panic!(
+            "util: Modulus q={} must be a prime power where prime is from prime list {}",
+            q,
+            available_primes
+                .iter()
+                .map(|&x| x.to_string())
+                .collect::<Vec<String>>()
+                .join(", ")
+        );
+    }
+}
+
+/// Find a prime that is enough to fit n bits
+pub fn a_prime_with_width(n: u16) -> u16 {
+    base_a_prime_with_width(n, &PRIMES)
+}
+
+/// Find one prime that is enough to fit n bits, from available_primes list.
+pub fn base_a_prime_with_width(n: u16, available_primes: &[u16]) -> u16 {
+    available_primes
+        .iter()
+        .find(|&&x| (x >> n as u16) > 0)
+        .expect(&format!(
+            "[FancyArithmetic::bit_composition] No prime available to fit {} bits value.",
+            n
+        ))
+        .clone()
+}
+
+/// ⌈log2(q)⌉: Determine the number of bits needed to represent a u16 modulus.
+pub fn bits_per_modulus(q: u16) -> u16 {
+    if q > 1 {
+        if q == 2 {
+            1
+        } else if q <= 4 {
+            2
+        } else if q <= 8 {
+            3
+        } else if q <= 16 {
+            4
+        } else if q <= 32 {
+            5
+        } else if q <= 64 {
+            6
+        } else if q <= 128 {
+            7
+        } else if q <= 256 {
+            8
+        } else if q <= 512 {
+            9
+        } else {
+            let mod_ring_upper_bound = q - 1;
+            let mut num_bits = 16;
+            while num_bits > 0 {
+                if (mod_ring_upper_bound >> (num_bits - 1)) & 1 == 1 {
+                    break;
+                }
+                num_bits -= 1;
+            }
+            num_bits
+        }
+    } else {
+        panic!(
+            "[util::bits_per_modulus] Modulus must be at least 2. Got {}",
+            q
+        );
+    }
+}
+
+/// Generate a CRT modulus that support at least n-bit integers, using the built-in
+/// PRIMES.
+pub fn modulus_with_width_opt(n: u32) -> u128 {
+    base_modulus_with_width(n, &PRIMES)
+}
+
+/// Get the constants `c_i` list for the CRT inversion, as the
+/// original `value = Σ (c_i * x_i) mod N`.
+/// And determine how many bits are needed to represent the max value.
+///
+/// @param `ps`: list of primes.
+///
+/// @return: constants `c_i` list for the CRT inversion, and the number of bits of `N`.
+///
+/// Ref: <https://www.ctfrecipes.com/cryptography/general-knowledge/maths/modular-arithmetic/chinese-remainder-theorem>,
+/// <https://doi.org/10.1007/978-3-031-58751-1_12>.
+pub fn crt_inv_constants(ps: &[u16]) -> (Vec<u128>, u16) {
+    if !ps.iter().all(|&p| PRIMES.contains(&p)) {
+        panic!(
+            "util: CRT supports for prime in the PRIMES list, but got {:?}",
+            ps
+        );
+    }
+    let N = ps.iter().fold(1, |acc, &x| x as i128 * acc);
+    let bits_required = |value: u128| -> u16 {
+        if value == 0 {
+            return 0;
+        }
+        (128 - value.leading_zeros()) as u16
+    };
+    (
+        ps.iter()
+            .map(|&p| {
+                let p = p as i128;
+                let E_i = N / p;
+                E_i as u128 * inv(E_i, p) as u128
+            })
+            .collect::<Vec<u128>>(),
+        bits_required(N as u128),
+    )
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // tests

@@ -4,6 +4,7 @@ use crate::{
     fancy::{Fancy, FancyInput, FancyReveal, HasModulus},
     FancyArithmetic, FancyBinary, Mod2kArithmetic, WireLabelMod2k,
 };
+use scuttlebutt::Block;
 use std::collections::{HashMap, HashSet};
 
 /// Implements `Fancy`. Used to learn information about a `Fancy` computation in
@@ -380,7 +381,7 @@ impl<F: FancyArithmetic> FancyArithmetic for Informer<F> {
 impl<F: Fancy + Mod2kArithmetic> Mod2kArithmetic for Informer<F> {
     type ItemMod2k = F::ItemMod2k;
     type ErrorMod2k = F::ErrorMod2k;
-    
+
     fn bit_composition(
         &mut self,
         K_j: &Vec<&Self::Item>,
@@ -410,8 +411,12 @@ impl<F: Fancy + Mod2kArithmetic> Mod2kArithmetic for Informer<F> {
         x: &Self::Item,
         delta2k: Option<&Self::ItemMod2k>,
         k_out: u16,
-    ) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
-        let result = self.underlying.mod_qto2k(x, delta2k, k_out)?;
+        external: bool,
+        external_table: Option<&Vec<Block>>,
+    ) -> Result<(Self::ItemMod2k, Option<Vec<Block>>), Self::ErrorMod2k> {
+        let result = self
+            .underlying
+            .mod_qto2k(x, delta2k, k_out, external, external_table)?;
         self.stats.nmodqto2k += 1;
         self.stats.nciphertexts += k_out as usize * (x.modulus() - 1) as usize;
         self.update_moduli2k(k_out);
@@ -429,7 +434,8 @@ impl<F: Fancy + Mod2kArithmetic> Mod2kArithmetic for Informer<F> {
         for ith in 0..(end - 1) {
             self.stats.nmodqto2k += 1;
             let k_out = std::cmp::max(k as i16 - ith as i16, 1) as u16;
-            self.stats.nciphertexts += k_out as usize * (result[ith as usize].modulus() - 1) as usize;
+            self.stats.nciphertexts +=
+                k_out as usize * (result[ith as usize].modulus() - 1) as usize;
             self.update_moduli2k(k_out);
         }
         self.stats.nmod2k_BD += 1;

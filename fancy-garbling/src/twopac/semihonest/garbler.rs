@@ -214,9 +214,11 @@ impl<C: AbstractChannel, RNG: CryptoRng + Rng, OT, Wire: WireLabel> Mod2kArithme
         x: &Self::Item,
         delta2k: Option<&Self::ItemMod2k>,
         k_out: u16,
-    ) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
+        external: bool,
+        external_table: Option<&Vec<Block>>,
+    ) -> Result<(Self::ItemMod2k, Option<Vec<Block>>), Self::ErrorMod2k> {
         self.garbler
-            .mod_qto2k(x, delta2k, k_out)
+            .mod_qto2k(x, delta2k, k_out, external, external_table)
             .map_err(Self::ErrorMod2k::from)
     }
 

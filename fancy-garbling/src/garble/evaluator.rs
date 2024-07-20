@@ -296,31 +296,38 @@ impl<C: AbstractChannel, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, Wire>
 
         Ok(L)
     }
-    
+
     fn mod_qto2k(
         &mut self,
         x: &Self::Item,
         _: Option<&Self::ItemMod2k>,
         k_out: u16,
-    ) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
+        external: bool,
+        external_table: Option<&Vec<Block>>,
+    ) -> Result<(Self::ItemMod2k, Option<Vec<Block>>), Self::ErrorMod2k> {
         let k = k_out; // let k = delta2k.k();
         let ngates = (x.modulus() - 1) as usize;
         let mut gate = Vec::with_capacity(ngates);
-        for _ in 0..ngates {
+        for nth in 0..ngates {
             let mut blocks = Vec::with_capacity(ngates);
-            for _ in 0..k {
-                blocks.push(self.channel.read_block()?);
+            for ith in 0..k {
+                if external {
+                    blocks.push(external_table.unwrap()[nth * k as usize + ith as usize]);
+                } else {
+                    blocks.push(self.channel.read_block()?);
+                }
             }
             gate.push(blocks);
         }
         let g = self.current_gate();
         let t = tweak(g);
-        if x.color() == 0 {
-            Ok(WireMod2k::zero(k_out).xor_hash_ofb_back(t, x.as_block()))
+        let r = if x.color() == 0 {
+            WireMod2k::zero(k_out).xor_hash_ofb_back(t, x.as_block())
         } else {
             let ct = gate[x.color() as usize - 1].clone();
-            Ok(WireMod2k::from_blocks(ct, k_out).xor_hash_ofb_back(t, x.as_block()))
-        }
+            WireMod2k::from_blocks(ct, k_out).xor_hash_ofb_back(t, x.as_block())
+        };
+        Ok((r, None))
     }
 
     fn mod2k_bit_composition(
@@ -332,11 +339,26 @@ impl<C: AbstractChannel, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, Wire>
         debug_assert!(K_i.iter().all(|x| x.modulus() == 2));
         let k = k.unwrap_or(K_i.len() as u16); // output WireMod 2^k from k bits
 
+        let Tab = (0..k as usize * std::cmp::min(k as usize, K_i.len()))
+            .map(|_| self.channel.read_block().unwrap())
+            .collect::<Vec<Block>>();
+
         // mod 2 to 2^k for each bit, then add them for free
         let L = K_i
             .iter()
             .take(k as usize)
-            .map(|&mod2wire| self.mod_qto2k(mod2wire, None, k).unwrap())
+            .enumerate()
+            .map(|(ith, &mod2wire)| {
+                self.mod_qto2k(
+                    mod2wire,
+                    None,
+                    k,
+                    true,
+                    Some(&Vec::from(&Tab[ith * k as usize..(ith + 1) * k as usize])),
+                )
+                .unwrap()
+                .0
+            })
             .fold(WireMod2k::zero(k), |acc, mod2kwire| acc.plus(&mod2kwire));
         Ok(L)
     }
@@ -347,13 +369,21 @@ impl<C: AbstractChannel, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, Wire>
         end: Option<u16>,
     ) -> Result<Vec<Self::Item>, Self::ErrorMod2k> {
         let k = AK.k();
-        let gate_num = self.current_gate();
         let end = end.unwrap_or(k);
+        let Tab: Vec<Block> = (0..end as usize
+            + (0..end - 1)
+                .map(|ith| std::cmp::max(k - ith, 1) as usize)
+                .sum::<usize>())
+            .map(|_| self.channel.read_block().unwrap())
+            .collect();
+        let mut Tab_idx: usize = 0;
+        let gate_num = self.current_gate();
 
         let mut L_i = AK.clone(); // initial: L^(0)
         let mut lower_l = Vec::with_capacity(end as usize);
         for ith in 0..end {
-            let Tab_C_i = [Block::default(), self.channel.read_block()?];
+            let Tab_C_i = [Block::default(), Tab[Tab_idx]];
+            Tab_idx += 1;
             let x_bar = L_i.color();
             let right = Tab_C_i[(x_bar & 1) as usize];
             let left = L_i.hash(tweak2(gate_num as u64, ith as u64));
@@ -361,13 +391,17 @@ impl<C: AbstractChannel, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, Wire>
 
             // miniBC: use K_i[ith] and mod_qto2k to reconstruct D^(i) or L^(i+1)
             if ith < end - 1 {
-                let D_i = self
+                let k_out_miniBC = std::cmp::max(k as i16 - ith as i16, 1) as usize;
+                let (D_i, _) = self
                     .mod_qto2k(
                         &lower_l_i,
                         None,
-                        std::cmp::max(k as i16 - ith as i16, 1) as u16,
+                        k_out_miniBC as u16,
+                        true,
+                        Some(&Vec::from(&Tab[Tab_idx..Tab_idx + k_out_miniBC])),
                     )
                     .unwrap();
+                Tab_idx += k_out_miniBC;
                 // L^(i+1) = (L^(i) - D^(i)) % 2^{k-i} / 2
                 let temp_L_i_next = L_i.minus(&D_i);
                 L_i = WireMod2k::new(

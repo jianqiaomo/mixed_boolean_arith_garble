@@ -595,7 +595,9 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
         x: &Self::Item,
         delta2k: Option<&Self::ItemMod2k>,
         k_out: u16,
-    ) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
+        external: bool,
+        _: Option<&Vec<Block>>,
+    ) -> Result<(Self::ItemMod2k, Option<Vec<Block>>), Self::ErrorMod2k> {
         let q_in = x.modulus();
         let mut potential_delta2k = vec![WireMod2k::zero(k_out)]; // used to store a created delta2k when no delta2k is provided
         let delta2k = delta2k.unwrap_or({
@@ -613,7 +615,7 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
             .xor_hash_ofb_back(g, (x.plus(&Din.cmul((q_in - tao) % q_in))).as_block())
             .plus(&Dout.cmul((q_out - ((q_in - tao) % q_in) as crate::mod2k::U) & (q_out - 1)));
 
-        let gate = (0..q_in as usize - 1)
+        let gate: Vec<Block> = (0..q_in as usize - 1)
             .map(|ith| {
                 let xth = (q_in + ith as u16 + 1 - tao) % q_in;
 
@@ -621,12 +623,17 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
                 let ct = C_precomputed.xor_hash_ofb_back(g, x.plus(&Din.cmul(xth)).as_block());
                 ct.as_blocks()
             })
-            .collect::<Vec<Vec<Block>>>();
+            .flat_map(|x| x)
+            .collect();
 
-        for block in gate.iter().flat_map(|x| x.iter()) {
-            self.channel.write_block(block)?; // k_out * (q_in - 1) Blocks
+        if external {
+            Ok((C, Option::from(gate)))
+        } else {
+            for block in gate.iter() {
+                self.channel.write_block(block)?; // (q_in - 1) * k_out Blocks
+            }
+            Ok((C, None))
         }
-        Ok(C)
     }
 
     fn mod2k_bit_decomposition(
@@ -648,6 +655,12 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
             Wire::from_block(AK.plus(&mod2k_delta).hash(tweak2(gate_num as u64, 0)), 2)
                 .minus(&mod2_delta)
         };
+        let mut Tab: Vec<Block> = Vec::with_capacity(
+            end as usize
+                + (0..end - 1)
+                    .map(|ith| std::cmp::max(k as i16 - ith as i16, 1) as usize)
+                    .sum::<usize>(),
+        );
         let K_i: Result<Vec<Wire>, _> = (0..end)
             .map(|ith| {
                 // Compute and send: C_{i, (beta + alpha^(i)) % 2}
@@ -666,20 +679,24 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
                     K_i_new.plus(&mod2_delta).as_block()
                 };
                 let C_i_beta_alpha_i_mod_2 = left ^ right;
-                self.channel.write_block(&C_i_beta_alpha_i_mod_2)?; // 1 Block, total will be 1 * k Blocks
+                // self.channel.write_block(&C_i_beta_alpha_i_mod_2)?; // 1 Block, total will be 1 * k Blocks
+                Tab.push(C_i_beta_alpha_i_mod_2); // 1 Block, total will be 1 * k Blocks
 
                 let K_i_last = K_i_new.clone();
                 // miniBC: use K_i[ith] and mod_qto2k for sampling DK^(i) or A^(i+1)
                 if ith < end - 1 {
                     let mod2k_delta_i =
                         mod2k_delta.mask_2k(std::cmp::max(k as i16 - ith as i16, 1) as u16); // delta2k % 2^(k-i)
-                    let DK_i_beta0 = self
+                    let (DK_i_beta0, DK_i_table) = self
                         .mod_qto2k(
                             &K_i_new,
                             Option::from(&mod2k_delta_i),
                             std::cmp::max(k as i16 - ith as i16, 1) as u16,
+                            true,
+                            None,
                         )
                         .unwrap();
+                    Tab.extend(DK_i_table.unwrap());
                     // A^(i+1) = ( A^(i) - DK^(i)_0 ) / 2
                     let temp_A_i_next = A_i.minus(&DK_i_beta0);
                     A_i = WireMod2k::new(
@@ -705,6 +722,9 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
                 Ok(K_i_last)
             })
             .collect();
+        for block in Tab.iter() {
+            self.channel.write_block(block)?;
+        }
         K_i
     }
 
@@ -716,6 +736,7 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
     ) -> Result<Self::ItemMod2k, Self::ErrorMod2k> {
         debug_assert!(K_i.iter().all(|x| x.modulus() == 2));
         let k = k.unwrap_or(K_i.len() as u16); // output WireMod 2^k from k bits
+        let mut Tab = Vec::with_capacity(k as usize * std::cmp::min(k as usize, K_i.len()));
         let A = self.delta2k(k); // mod2k_delta (self.delta): A is the delta of output WireMod 2^k
 
         // mod 2 to 2^k for each bit, then add them for free. Iteration stops at min(k, K_i.len())
@@ -725,10 +746,17 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
             .enumerate()
             .map(|(ith, &mod2wire)| {
                 let delta2k_times_2_pow_i = A.cmul(c_i.map(|c| c[ith]).unwrap_or(1 << ith));
-                self.mod_qto2k(mod2wire, Some(&delta2k_times_2_pow_i), k)
-                    .unwrap()
+                let (r, ct) = self
+                    .mod_qto2k(mod2wire, Some(&delta2k_times_2_pow_i), k, true, None)
+                    .unwrap();
+                Tab.extend(ct.unwrap());
+                r
             })
             .fold(WireMod2k::zero(k), |acc, mod2kwire| acc.plus(&mod2kwire));
+
+        for block in Tab.iter() {
+            self.channel.write_block(block)?;
+        }
 
         Ok(B)
     }
