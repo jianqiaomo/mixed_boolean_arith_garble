@@ -540,10 +540,111 @@ pub fn bits_per_modulus(q: u16) -> u16 {
     }
 }
 
-/// Generate a CRT modulus that support at least n-bit integers, using the built-in
-/// PRIMES.
+/// Optimize generating a CRT modulus that support at least n-bit integers,
+/// using *fewer* built-in PRIMES.
 pub fn modulus_with_width_opt(n: u32) -> u128 {
-    base_modulus_with_width(n, &PRIMES)
+    let ps_orig = base_primes_with_width(n, &PRIMES);
+    let m_orig = product(&ps_orig);
+
+    // remove some excludable primes where
+    // their product is close but not bigger than (<=) excludable, and
+    // their sum should be as big as possible
+    let excludable = m_orig / (1 << n);
+    if excludable < 2 || n == 0 {
+        // no removable primes
+        return m_orig;
+    } else {
+        // the shortest set (i.e., one element) of excludable ps
+        let excld_short = vec![ps_orig
+            .iter()
+            .filter(|&&p| p <= excludable as u16)
+            .max()
+            .unwrap()];
+        // the longest set of excludable ps
+        let excld_long_idx = ps_orig
+            .iter()
+            .enumerate()
+            .scan(1, |acc, (index, &x)| {
+                *acc *= x as u128;
+                if *acc > excludable {
+                    None
+                } else {
+                    Some(index)
+                }
+            })
+            .last()
+            .unwrap_or_else(|| ps_orig.len() - 1);
+        if excld_long_idx == 0 {
+            // only one prime is excludable
+            return m_orig / *excld_short[0] as u128;
+        } else {
+            let excld_long = Vec::from(&ps_orig[..=excld_long_idx]);
+            let excld_long_ref = excld_long.iter().collect::<Vec<&u16>>();
+            // excludable primes between the shortest and the longest set
+            let excld_between = (2..=excld_long_idx)
+                .map(|subset_size| {
+                    ps_orig
+                        .iter()
+                        .combinations(subset_size)
+                        // product is not bigger than excludable
+                        .filter(|comb| {
+                            comb.iter().fold(1, |acc, &&x| acc * x as u128) <= excludable
+                        })
+                        // sum should be as big as possible
+                        .max_by_key(|comb| comb.iter().map(|&&x| x as u128).sum::<u128>())
+                        .unwrap()
+                })
+                .collect::<Vec<_>>();
+            let excld_all: Vec<&Vec<&u16>> = excld_between
+                .iter()
+                .chain(std::iter::once(&excld_short))
+                .chain(std::iter::once(&excld_long_ref))
+                .collect();
+            // find the set of primes with the biggest sum for later exclusion
+            let excld_between_max = excld_all
+                .iter()
+                .max_by_key(|comb| comb.iter().map(|&&x| x as u128).sum::<u128>())
+                .unwrap()
+                .to_vec();
+            // find other set of possible primes with size (1..=possible_ps_len)
+            let possible_ps_len =
+                ps_orig.len() - excld_all.iter().map(|vec| vec.len()).max().unwrap() - 1;
+            let ps_rest_sum = ps_orig.iter().map(|&x| x as u128).sum::<u128>()
+                - excld_between_max.iter().map(|&&x| x as u128).sum::<u128>();
+            let possible_ps = ps_orig
+                .iter()
+                .filter(|&&x| x as u128 <= ps_rest_sum)
+                .collect::<Vec<_>>();
+            let possible_ps_comb = (2..=possible_ps_len)
+                .flat_map(|size| {
+                    possible_ps
+                        .iter()
+                        .combinations(size)
+                        .filter(|comb| comb.iter().fold(1, |acc, &&&x| acc * x as u128) >= 1 << n)
+                        .filter(|comb| {
+                            comb.iter().map(|&&&x| x as u128).sum::<u128>() < ps_rest_sum
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>();
+            let m = match possible_ps_comb.len() {
+                // exclude the set of primes with the biggest sum (by dividing their product)
+                0 => m_orig / excld_between_max.iter().fold(1, |acc, &&x| acc * x as u128),
+                _ => {
+                    // if there exist possible sets of primes with smaller sum
+                    let possible_ps_comb_min = possible_ps_comb
+                        .iter()
+                        .min_by_key(|comb| comb.iter().map(|&&&x| x as u128).sum::<u128>())
+                        .unwrap();
+                    possible_ps_comb_min
+                        .iter()
+                        .fold(1, |acc, &&&x| acc * x as u128)
+                }
+            };
+            debug_assert!(m >= 1 << n);
+            return m;
+        }
+    }
 }
 
 /// Get the constants `c_i` list for the CRT inversion, as the
@@ -640,6 +741,25 @@ mod tests {
             let y = as_base_q(x, q, digits_per_u128(q));
             let z = from_base_q(&y, q);
             assert_eq!(x, z);
+        }
+    }
+
+    #[test]
+    fn modulus_with_width_optimization() {
+        let handles: Vec<_> = (0..128u32)
+            .map(|bitwidth| {
+                std::thread::spawn(move || {
+                    let mod0 = modulus_with_width(bitwidth);
+                    let mod1 = modulus_with_width_opt(bitwidth);
+                    let mod0_ps_sum = factor(mod0).iter().map(|&x| x as u32).sum::<u32>();
+                    let mod1_ps_sum = factor(mod1).iter().map(|&x| x as u32).sum::<u32>();
+                    assert!(mod1 >= 1 << bitwidth);
+                    assert!(mod0_ps_sum >= mod1_ps_sum);
+                })
+            })
+            .collect();
+        for handle in handles {
+            handle.join().expect("Thread panicked");
         }
     }
 }
