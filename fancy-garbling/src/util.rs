@@ -616,6 +616,10 @@ pub fn modulus_with_width_opt(n: u32) -> u128 {
                 .filter(|&&x| x as u128 <= ps_rest_sum)
                 .collect::<Vec<_>>();
             let possible_ps_comb = (2..=possible_ps_len)
+                .rev()
+                .filter(|&size| {
+                    ps_rest_sum as f32 / size as f32 >= (n as f32 / size as f32).exp2()
+                })
                 .flat_map(|size| {
                     possible_ps
                         .iter()
