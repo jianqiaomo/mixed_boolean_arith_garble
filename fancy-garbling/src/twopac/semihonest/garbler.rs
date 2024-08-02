@@ -183,12 +183,12 @@ impl<C: AbstractChannel, RNG: CryptoRng + Rng, OT, Wire: WireLabel> Fancy
     }
 }
 
-impl<C: AbstractChannel, RNG: CryptoRng + Rng, OT, Wire: WireLabel> Mod2kArithmetic
+impl<C: AbstractChannel, RNG: CryptoRng + Rng, OT, Wire: WireLabel + ArithmeticWire> Mod2kArithmetic
     for Garbler<C, RNG, OT, Wire>
 {
     type ItemMod2k = WireMod2k;
     type ErrorMod2k = TwopacError;
-    
+
     fn bit_decomposition(
         &mut self,
         AK: &Wire,

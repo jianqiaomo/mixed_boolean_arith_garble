@@ -473,7 +473,7 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel + ArithmeticW
     }
 }
 
-impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithmetic
+impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel + ArithmeticWire> Mod2kArithmetic
     for Garbler<C, RNG, Wire>
 {
     type ItemMod2k = WireMod2k;
@@ -486,52 +486,12 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
         let p = q2pk(q).0; // let p = q;
         let j = end.unwrap_or(bits_per_modulus(p));
 
-        let gate_num = self.current_gate();
-        let g = tweak2(gate_num as u64, 0);
-        let A = AK.clone();
-        let alpha = A.color();
-        let modp_delta = self.delta(p);
-        let mod2_delta = self.delta(2);
-        let K_j_p_alpha = WireMod2k::block_xor_hash_ofb(
-            vec![Block::default(); j as usize],
-            g,
-            A.plus(&modp_delta.cmul((p - alpha) % p)).as_block(),
-        )
-        .iter()
-        .map(|&x| Wire::from_block(x, 2))
-        .collect::<Vec<Wire>>();
-        let K_j = K_j_p_alpha
-            .iter()
-            .enumerate()
-            .map(|(ith, x)| {
-                let beta = ((p - alpha) % p) >> ith & 1;
-                x.minus(&mod2_delta.cmul(beta))
+        let K_j = (0..j)
+            .map(|jth| {
+                let tab: Vec<u16> = (0..p).map(|x| x >> jth & 1).collect();
+                self.proj(AK, 2, Some(tab)).unwrap()
             })
             .collect::<Vec<Wire>>();
-
-        // C_{j, beta + alpha} =
-        //     left: H(A + beta * modp_delta; (id, 0))
-        //     XOR
-        //     right: K_j(beta_j)
-        let Tab: Vec<Block> = (1..p) // row reduction for 0th
-            .flat_map(|beta_th| {
-                let beta = (p - alpha + beta_th) % p;
-                let left = A.plus(&modp_delta.cmul(beta)).as_block();
-                let right = K_j
-                    .iter()
-                    .enumerate()
-                    .map(|(jth, x)| {
-                        let beta_j = (beta >> jth) as u16 & 1;
-                        x.plus(&mod2_delta.cmul(beta_j)).as_block()
-                    })
-                    .collect::<Vec<Block>>();
-                WireMod2k::block_xor_hash_ofb(right, g, left)
-            })
-            .collect::<Vec<Block>>(); // ((p - 1) * j) blocks
-
-        for block in Tab.iter() {
-            self.channel.write_block(block)?;
-        }
         Ok(K_j)
     }
 
@@ -543,50 +503,14 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel> Mod2kArithme
         // p is output wire prime that is enough to fit j bits
         let p = p.unwrap_or(a_prime_with_width(j as u16));
 
-        let gate_num = self.current_gate();
-        let mod2_delta = self.delta(2);
-        let A = self.delta(p); // A is the delta of output WireModp
-        let B_j = K_j
+        let B = K_j
             .iter()
             .enumerate()
             .map(|(jth, &K)| {
-                let alpha = K.color();
-                let g = tweak2(gate_num as u64, jth as u64);
-                let hashK = if alpha == 0 {
-                    K.hashback(g, p)
-                } else {
-                    K.plus(&mod2_delta).hashback(g, p)
-                }
-                .negate()
-                .minus(&A.cmul((1 << jth) as u16 * alpha));
-                hashK
+                let tab: Vec<u16> = (0..2).map(|x| (x << jth) % p).collect();
+                self.proj(K, p, Some(tab)).unwrap()
             })
-            .collect::<Vec<Wire>>();
-        let B = B_j.iter().fold(Wire::zero(p), |acc, x| acc.plus(x)); // B is the zero wire of output WireModp
-
-        // C_{j, beta + alpha_j} =
-        //     left: H(K_j(beta); (id, j))
-        //     XOR
-        //     right: B_j + 2^j * beta * A
-        let Tab: Vec<Block> = K_j
-            .iter()
-            .enumerate()
-            .map(|(jth, &K)| {
-                let alpha = K.color();
-                let g = tweak2(gate_num as u64, jth as u64);
-                let left = if alpha == 0 {
-                    K.plus(&mod2_delta).hashback(g, p)
-                } else {
-                    K.hashback(g, p)
-                };
-                let right = B_j[jth].plus(&A.cmul((1 << jth) as u16 * ((alpha + 1) & 1)));
-                left.plus(&right).as_block()
-            })
-            .collect();
-
-        for block in Tab.iter() {
-            self.channel.write_block(block)?;
-        }
+            .fold(Wire::zero(p), |acc, x| acc.plus(&x));
         Ok(B)
     }
 

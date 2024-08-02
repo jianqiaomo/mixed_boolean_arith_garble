@@ -163,7 +163,9 @@ impl<C: AbstractChannel, RNG, OT, Wire: WireLabel> Fancy for Evaluator<C, RNG, O
     }
 }
 
-impl<C: AbstractChannel, RNG, OT, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, RNG, OT, Wire> {
+impl<C: AbstractChannel, RNG, OT, Wire: WireLabel + ArithmeticWire> Mod2kArithmetic
+    for Evaluator<C, RNG, OT, Wire>
+{
     type ItemMod2k = WireMod2k;
     type ErrorMod2k = TwopacError;
 

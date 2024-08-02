@@ -4,7 +4,7 @@
 //! but each element is not mod `p` but mod `p^k`.
 
 use crate::errors::FancyError;
-use crate::{util, Fancy};
+use crate::{util, FancyArithmetic};
 use rand::{CryptoRng, Rng, RngCore};
 use scuttlebutt::{Block, AES_HASH};
 
@@ -427,14 +427,13 @@ impl WireLabelMod2k for WireMod2k {
 /// WireMod2^k arithmetic computation.
 /// Used for intermediate values in the mixed GC.
 /// <https://doi.org/10.1007/978-3-031-58751-1_12>.
-pub trait Mod2kArithmetic: Fancy {
+pub trait Mod2kArithmetic: FancyArithmetic {
     /// The underlying wire datatype created by an object implementing WireMod2^k.
     type ItemMod2k: WireLabelMod2k;
 
     /// Errors which may be thrown by the users of Fancy.
     type ErrorMod2k: std::fmt::Debug + std::fmt::Display + std::convert::From<FancyError>;
 
-    
     /// Decompose arithmetic wire AK into bits.
     /// Returns a vector of wires Mod2.
     /// Link: <https://doi.org/10.1007/978-3-031-58751-1_12>

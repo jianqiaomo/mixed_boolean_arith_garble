@@ -235,7 +235,7 @@ impl<C: AbstractChannel, Wire: WireLabel + ArithmeticWire> FancyArithmetic for E
     }
 }
 
-impl<C: AbstractChannel, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, Wire> {
+impl<C: AbstractChannel, Wire: WireLabel + ArithmeticWire> Mod2kArithmetic for Evaluator<C, Wire> {
     type ItemMod2k = WireMod2k;
     type ErrorMod2k = EvaluatorError;
 
@@ -246,22 +246,9 @@ impl<C: AbstractChannel, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, Wire>
         let p = q2pk(q).0; // let p = q;
         let j = end.unwrap_or(bits_per_modulus(p));
 
-        let gate_num = self.current_gate();
-        let x_bar = AK.color();
-
-        let mut Tab = vec![Block::default(); (j * p) as usize];
-        for ith in j as usize..((j * p) as usize) {
-            let block = self.channel.read_block()?;
-            Tab[ith] = block;
-        }
-
-        // copy Tab from x_bar * j to x_bar * j + j
-        let CipherTab = Tab[(x_bar * j) as usize..(x_bar * j + j) as usize].to_vec();
-        let g = tweak2(gate_num as u64, 0);
-        let l_j: Vec<Wire> = WireMod2k::block_xor_hash_ofb(CipherTab, g, AK.as_block())
-            .iter()
-            .map(|x| Wire::from_block(*x, 2))
-            .collect();
+        let l_j = (0..j)
+            .map(|_| self.proj(AK, 2, None).unwrap())
+            .collect::<Vec<Wire>>();
         Ok(l_j)
     }
 
@@ -277,23 +264,13 @@ impl<C: AbstractChannel, Wire: WireLabel> Mod2kArithmetic for Evaluator<C, Wire>
         // p is output wire prime that is enough to fit j bits
         let p = p.unwrap_or(a_prime_with_width(j as u16));
 
-        let mut Tab = vec![Block::default(); (j * 2) as usize];
-        for ith in (1..(j * 2)).step_by(2) {
-            let block = self.channel.read_block()?;
-            Tab[ith as usize] = block;
-        }
-        let gate_num = self.current_gate();
-
-        let L: Wire = (0..j)
-            .map(|jth| {
-                let x_bar = K_j[jth].color();
-                let g = tweak2(gate_num as u64, jth as u64);
-                let hash = K_j[jth].hashback(g, p);
-                let L_j = Wire::from_block(Tab[jth * 2 + x_bar as usize], p).minus(&hash);
-                L_j
+        let L = K_j
+            .iter()
+            .map(|K| {
+                // let tab: Vec<u16> = (0..2).map(|x| (x << jth) % p).collect();
+                self.proj(K, p, None).unwrap()
             })
             .fold(Wire::zero(p), |acc, x| acc.plus(&x));
-
         Ok(L)
     }
 
