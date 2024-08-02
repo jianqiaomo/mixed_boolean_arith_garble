@@ -551,43 +551,10 @@ impl<C: AbstractChannel, RNG: RngCore + CryptoRng, Wire: WireLabel + ArithmeticW
             .iter()
             .enumerate()
             .map(|(jth, &K)| {
-                let alpha = K.color();
-                let g = tweak2(gate_num as u64, jth as u64);
-                let hashK = if alpha == 0 {
-                    K.hashback(g, p)
-                } else {
-                    K.plus(&mod2_delta).hashback(g, p)
-                }
-                .negate()
-                .minus(&A.cmul((1 << jth) as u16 * alpha));
-                hashK
+                let tab: Vec<u16> = (0..2).map(|x| (x << jth) % p).collect();
+                self.proj(K, p, Some(tab)).unwrap()
             })
-            .collect::<Vec<Wire>>();
-        let B = B_j.iter().fold(Wire::zero(p), |acc, x| acc.plus(x)); // B is the zero wire of output WireModp
-
-        // C_{j, beta + alpha_j} =
-        //     left: H(K_j(beta); (id, j))
-        //     XOR
-        //     right: B_j + 2^j * beta * A
-        let Tab: Vec<Block> = K_j
-            .iter()
-            .enumerate()
-            .map(|(jth, &K)| {
-                let alpha = K.color();
-                let g = tweak2(gate_num as u64, jth as u64);
-                let left = if alpha == 0 {
-                    K.plus(&mod2_delta).hashback(g, p)
-                } else {
-                    K.hashback(g, p)
-                };
-                let right = B_j[jth].plus(&A.cmul((1 << jth) as u16 * ((alpha + 1) & 1)));
-                left.plus(&right).as_block()
-            })
-            .collect();
-
-        for block in Tab.iter() {
-            self.channel.write_block(block)?;
-        }
+            .fold(Wire::zero(p), |acc, x| acc.plus(&x));
         Ok(B)
     }
 

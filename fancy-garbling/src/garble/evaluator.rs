@@ -307,20 +307,11 @@ impl<C: AbstractChannel, Wire: WireLabel + ArithmeticWire> Mod2kArithmetic for E
         // p is output wire prime that is enough to fit j bits
         let p = p.unwrap_or(a_prime_with_width(j as u16));
 
-        let mut Tab = vec![Block::default(); (j * 2) as usize];
-        for ith in (1..(j * 2)).step_by(2) {
-            let block = self.channel.read_block()?;
-            Tab[ith as usize] = block;
-        }
-        let gate_num = self.current_gate();
-
-        let L: Wire = (0..j)
-            .map(|jth| {
-                let x_bar = K_j[jth].color();
-                let g = tweak2(gate_num as u64, jth as u64);
-                let hash = K_j[jth].hashback(g, p);
-                let L_j = Wire::from_block(Tab[jth * 2 + x_bar as usize], p).minus(&hash);
-                L_j
+        let L = K_j
+            .iter()
+            .map(|K| {
+                // let tab: Vec<u16> = (0..2).map(|x| (x << jth) % p).collect();
+                self.proj(K, p, None).unwrap()
             })
             .fold(Wire::zero(p), |acc, x| acc.plus(&x));
         Ok(L)
