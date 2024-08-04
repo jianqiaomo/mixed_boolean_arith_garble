@@ -564,7 +564,8 @@ pub trait MixCrtBinaryGadgets: Mod2kArithmetic + CrtGadgets {
         x: &BinaryBundle<Self::Item>,
     ) -> Result<CrtBundle<Self::Item>, Self::Error> {
         let bitwidth = x.size();
-        let crt_modulus_N = util::modulus_with_width(bitwidth as u32);
+        // let crt_modulus_N = util::modulus_with_width(bitwidth as u32);
+        let crt_modulus_N = util::modulus_with_width_opt(bitwidth as u32);
         let p_s = util::factor(crt_modulus_N);
         let r = p_s
             .iter()
