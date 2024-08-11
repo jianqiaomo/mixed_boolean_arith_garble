@@ -302,13 +302,39 @@ pub trait BinaryGadgets: FancyBinary + BundleGadgets {
     /// Subtract two binary bundles. Returns the result and whether it underflowed.
     ///
     /// Due to the way that `twos_complement(0) = 0`, underflow indicates `y != 0 && x >= y`.
+    // fn bin_subtraction(
+    //     &mut self,
+    //     xs: &BinaryBundle<Self::Item>,
+    //     ys: &BinaryBundle<Self::Item>,
+    // ) -> Result<(BinaryBundle<Self::Item>, Self::Item), Self::Error> {
+    //     let neg_ys = self.bin_twos_complement(ys)?;
+    //     self.bin_addition(xs, &neg_ys)
+    // }
     fn bin_subtraction(
         &mut self,
         xs: &BinaryBundle<Self::Item>,
         ys: &BinaryBundle<Self::Item>,
     ) -> Result<(BinaryBundle<Self::Item>, Self::Item), Self::Error> {
-        let neg_ys = self.bin_twos_complement(ys)?;
-        self.bin_addition(xs, &neg_ys)
+        if xs.moduli() != ys.moduli() {
+            return Err(Self::Error::from(FancyError::UnequalModuli));
+        } else {
+            let xwires = xs.wires();
+            let ywires = ys.wires();
+            let size = xwires.len();
+
+            let mut dest = BinaryBundle::new(Vec::with_capacity(size));
+            let mut borrow = self.constant(0, 2)?;
+
+            for i in 0..size {
+                let bxa = self.xor(&xwires[i], &ywires[i])?;
+                let bxc = self.xor(&borrow, &ywires[i])?;
+                let dest_i = self.xor(&bxa, &borrow)?;
+                dest.push(dest_i);
+                let t = self.and(&bxa, &bxc)?;
+                borrow = self.xor(&borrow, &t)?;
+            }
+            Ok((dest, borrow))
+        }
     }
 
     /// If `x=0` return `c1` as a bundle of constant bits, else return `c2`.
