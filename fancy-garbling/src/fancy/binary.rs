@@ -323,9 +323,13 @@ pub trait BinaryGadgets: FancyBinary + BundleGadgets {
             let size = xwires.len();
 
             let mut dest = BinaryBundle::new(Vec::with_capacity(size));
-            let mut borrow = self.constant(0, 2)?;
+            // let mut borrow = self.constant(0, 2)?;
+            // no borrow in, process the 0 step
+            let bxa = self.xor(&xwires[0], &ywires[0])?;
+            dest.push(bxa.clone());
+            let mut borrow = self.and(&bxa, &ywires[0])?;
 
-            for i in 0..size {
+            for i in 1..size {
                 let bxa = self.xor(&xwires[i], &ywires[i])?;
                 let bxc = self.xor(&borrow, &ywires[i])?;
                 let dest_i = self.xor(&bxa, &borrow)?;
