@@ -266,6 +266,28 @@ pub trait BinaryGadgets: FancyBinary + BundleGadgets {
         Ok(qs)
     }
 
+    /// Public Exponentiation: `x^c`
+    fn bin_cexp(
+        &mut self,
+        x: &BinaryBundle<Self::Item>,
+        c: u128,
+    ) -> Result<BinaryBundle<Self::Item>, Self::Error> {
+        if c == 0 {
+            return self.bin_constant_bundle(1, x.size());
+        } else {
+            if c & 1 == 0 {
+                // c is even
+                let x2 = self.bin_multiplication_lower_half(x, x)?;
+                self.bin_cexp(&x2, c >> 1)
+            } else {
+                // c is odd
+                let x2 = self.bin_multiplication_lower_half(x, x)?;
+                let y = self.bin_cexp(&x2, c >> 1)?;
+                self.bin_multiplication_lower_half(x, &y)
+            }
+        }
+    }
+
     /// Mod: get remainder x % y
     fn bin_mod(
         &mut self,
