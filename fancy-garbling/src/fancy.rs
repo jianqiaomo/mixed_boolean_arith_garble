@@ -124,10 +124,14 @@ pub trait FancyBinary: Fancy {
         x: &Self::Item,
         y: &Self::Item,
     ) -> Result<Self::Item, Self::Error> {
-        let notb = self.negate(b)?;
-        let xsel = self.and(&notb, x)?;
-        let ysel = self.and(b, y)?;
-        self.xor(&xsel, &ysel)
+        // let notb = self.negate(b)?;
+        // let xsel = self.and(&notb, x)?;
+        // let ysel = self.and(b, y)?;
+        // self.xor(&xsel, &ysel)
+
+        let x_y = self.xor(x, y)?;
+        let x_y_and_b = self.and(&x_y, b)?; // fewer and gate
+        self.xor(x, &x_y_and_b)
     }
 }
 
