@@ -303,7 +303,7 @@ pub trait BinaryGadgets: FancyBinary + BundleGadgets {
                 .map(|x| x.clone())
                 .collect::<Vec<Self::Item>>(),
         );
-        self.bin_subtraction(xs, &res).map(|(res, _)| res)
+        self.bin_subtraction_opt(xs, &res).map(|(res, _)| res)
     }
 
     /// Compute the twos complement of the input bundle (which must be base 2).
@@ -324,15 +324,17 @@ pub trait BinaryGadgets: FancyBinary + BundleGadgets {
     /// Subtract two binary bundles. Returns the result and whether it underflowed.
     ///
     /// Due to the way that `twos_complement(0) = 0`, underflow indicates `y != 0 && x >= y`.
-    // fn bin_subtraction(
-    //     &mut self,
-    //     xs: &BinaryBundle<Self::Item>,
-    //     ys: &BinaryBundle<Self::Item>,
-    // ) -> Result<(BinaryBundle<Self::Item>, Self::Item), Self::Error> {
-    //     let neg_ys = self.bin_twos_complement(ys)?;
-    //     self.bin_addition(xs, &neg_ys)
-    // }
     fn bin_subtraction(
+        &mut self,
+        xs: &BinaryBundle<Self::Item>,
+        ys: &BinaryBundle<Self::Item>,
+    ) -> Result<(BinaryBundle<Self::Item>, Self::Item), Self::Error> {
+        let neg_ys = self.bin_twos_complement(ys)?;
+        self.bin_addition(xs, &neg_ys)
+    }
+
+    /// Optimize: Subtract two binary bundles. Returns the result and whether it underflowed.
+    fn bin_subtraction_opt(
         &mut self,
         xs: &BinaryBundle<Self::Item>,
         ys: &BinaryBundle<Self::Item>,
@@ -431,66 +433,110 @@ pub trait BinaryGadgets: FancyBinary + BundleGadgets {
     }
 
     /// Returns 1 if `x < y` (signed version)
+    // fn bin_lt_signed(
+    //     &mut self,
+    //     x: &BinaryBundle<Self::Item>,
+    //     y: &BinaryBundle<Self::Item>,
+    // ) -> Result<Self::Item, Self::Error> {
+    //     // determine whether x and y are positive or negative
+    //     let x_neg = &x.wires().last().unwrap();
+    //     let y_neg = &y.wires().last().unwrap();
+    //     let x_pos = self.negate(x_neg)?;
+    //     let y_pos = self.negate(y_neg)?;
+    //     // broken into cases based on x and y being negative or positive
+    //     // base case: if x and y have the same sign - use unsigned lt
+    //     let x_lt_y_unsigned = self.bin_lt(x, y)?;
+    //     // if x is negative and y is positive then x < y
+    //     let tru = self.constant(1, 2)?;
+    //     let x_neg_y_pos = self.and(x_neg, &y_pos)?;
+    //     let r2 = self.mux(&x_neg_y_pos, &x_lt_y_unsigned, &tru)?;
+    //     // if x is positive and y is negative then !(x < y)
+    //     let fls = self.constant(0, 2)?;
+    //     let x_pos_y_neg = self.and(&x_pos, y_neg)?;
+    //     self.mux(&x_pos_y_neg, &r2, &fls)
+    // }
     fn bin_lt_signed(
         &mut self,
         x: &BinaryBundle<Self::Item>,
         y: &BinaryBundle<Self::Item>,
     ) -> Result<Self::Item, Self::Error> {
-        // determine whether x and y are positive or negative
-        let x_neg = &x.wires().last().unwrap();
-        let y_neg = &y.wires().last().unwrap();
-        let x_pos = self.negate(x_neg)?;
-        let y_pos = self.negate(y_neg)?;
-
-        // broken into cases based on x and y being negative or positive
-        // base case: if x and y have the same sign - use unsigned lt
-        let x_lt_y_unsigned = self.bin_lt(x, y)?;
-
-        // if x is negative and y is positive then x < y
-        let tru = self.constant(1, 2)?;
-        let x_neg_y_pos = self.and(x_neg, &y_pos)?;
-        let r2 = self.mux(&x_neg_y_pos, &x_lt_y_unsigned, &tru)?;
-
-        // if x is positive and y is negative then !(x < y)
-        let fls = self.constant(0, 2)?;
-        let x_pos_y_neg = self.and(&x_pos, y_neg)?;
-        self.mux(&x_pos_y_neg, &r2, &fls)
+        // signed extend x and y for 1 bit
+        let x_msb = x.wires().last().unwrap();
+        let y_msb = y.wires().last().unwrap();
+        let x_ext = BinaryBundle::new(
+            x.wires()
+                .iter()
+                .chain(std::iter::once(x_msb))
+                .cloned()
+                .collect(),
+        );
+        let y_ext = BinaryBundle::new(
+            y.wires()
+                .iter()
+                .chain(std::iter::once(y_msb))
+                .cloned()
+                .collect(),
+        );
+        let (tmp, _) = self.bin_subtraction_opt(&x_ext, &y_ext)?;
+        let r = tmp.wires().last().unwrap().clone();
+        Ok(r)
     }
 
-    /// Returns 1 if `x < y`.
+    /// Returns 1 if (unsigned) `x < y`.
+    // fn bin_lt(
+    //     &mut self,
+    //     x: &BinaryBundle<Self::Item>,
+    //     y: &BinaryBundle<Self::Item>,
+    // ) -> Result<Self::Item, Self::Error> {
+    //     // underflow indicates y != 0 && x >= y
+    //     // requiring special care to remove the y != 0, which is what follows.
+    //     let (_, lhs) = self.bin_subtraction(x, y)?;
+    //     // Now we build a clause equal to (y == 0 || x >= y), which we can OR with
+    //     // lhs to remove the y==0 aspect.
+    //     // check if y==0
+    //     let y_contains_1 = self.or_many(y.wires())?;
+    //     let y_eq_0 = self.negate(&y_contains_1)?;
+    //     // if x != 0, then x >= y, ... assuming x is not negative
+    //     let x_contains_1 = self.or_many(x.wires())?;
+    //     // y == 0 && x >= y
+    //     let rhs = self.and(&y_eq_0, &x_contains_1)?;
+    //     // (y != 0 && x >= y) || (y == 0 && x >= y)
+    //     // => x >= y && (y != 0 || y == 0)\
+    //     // => x >= y && 1
+    //     // => x >= y
+    //     let geq = self.or(&lhs, &rhs)?;
+    //     let ngeq = self.negate(&geq)?;
+    //     let xy_neq_0 = self.or(&y_contains_1, &x_contains_1)?;
+    //     self.and(&xy_neq_0, &ngeq)
+    // }
     fn bin_lt(
         &mut self,
         x: &BinaryBundle<Self::Item>,
         y: &BinaryBundle<Self::Item>,
     ) -> Result<Self::Item, Self::Error> {
-        // underflow indicates y != 0 && x >= y
-        // requiring special care to remove the y != 0, which is what follows.
-        let (_, lhs) = self.bin_subtraction(x, y)?;
-
-        // Now we build a clause equal to (y == 0 || x >= y), which we can OR with
-        // lhs to remove the y==0 aspect.
-        // check if y==0
-        let y_contains_1 = self.or_many(y.wires())?;
-        let y_eq_0 = self.negate(&y_contains_1)?;
-
-        // if x != 0, then x >= y, ... assuming x is not negative
-        let x_contains_1 = self.or_many(x.wires())?;
-
-        // y == 0 && x >= y
-        let rhs = self.and(&y_eq_0, &x_contains_1)?;
-
-        // (y != 0 && x >= y) || (y == 0 && x >= y)
-        // => x >= y && (y != 0 || y == 0)\
-        // => x >= y && 1
-        // => x >= y
-        let geq = self.or(&lhs, &rhs)?;
-        let ngeq = self.negate(&geq)?;
-
-        let xy_neq_0 = self.or(&y_contains_1, &x_contains_1)?;
-        self.and(&xy_neq_0, &ngeq)
+        // unsigned extend x and y for 1 bit
+        let x_msb = self.constant(0, 2)?;
+        let y_msb = self.constant(0, 2)?;
+        let x_ext = BinaryBundle::new(
+            x.wires()
+                .iter()
+                .chain(std::iter::once(&x_msb))
+                .cloned()
+                .collect(),
+        );
+        let y_ext = BinaryBundle::new(
+            y.wires()
+                .iter()
+                .chain(std::iter::once(&y_msb))
+                .cloned()
+                .collect(),
+        );
+        let (tmp, _) = self.bin_subtraction_opt(&x_ext, &y_ext)?;
+        let r = tmp.wires().last().unwrap();
+        Ok(r.clone())
     }
 
-    /// Returns 1 if `x >= y`.
+    /// Returns 1 if (unsigned) `x >= y`.
     fn bin_geq(
         &mut self,
         x: &BinaryBundle<Self::Item>,
