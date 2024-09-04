@@ -1,5 +1,6 @@
 import pandas as pd
 import openpyxl
+import argparse
 
 
 def analyze_comm_text_file(file_path):
@@ -14,7 +15,7 @@ def analyze_comm_text_file(file_path):
 
     with open(file_path, 'r') as file:
         trunks = file.read().strip().split('\n\n')  # Split by empty lines to get trunks
-
+        trunks = trunks[1:]  # skip 'Repeat: 20480\nType (0 comm, 1 run time): 0 '
         for trunk_i, trunk in enumerate(trunks):
 
             lines = trunk.strip().split('\n')
@@ -183,15 +184,24 @@ def save_to_excel(df, output_path):
         df.to_excel(writer, index=True)
     print(f"Data has been successfully written to {output_path}")
 
+def parse_args():
+    parser = argparse.ArgumentParser(description='Tabularize the method profile results')
+    parser.add_argument('--type', type=str, help='Type of data you want to analyze: "comm" or "time"')
+    parser.add_argument('--file_path', type=str, default='method_profile_result.txt',
+                        help='Path to the input text file containing the method profile results')
+    parser.add_argument('--output_path', type=str, default=f'{parser.parse_args().type}_result.xlsx',
+                        help='Path to the output Excel file')
+    return parser.parse_args()
+
 
 if __name__ == "__main__":
     """
     run method_profile.rs to evaluate the communication or run time results of each workload
     """
 
-    analyzing = 'time'  # 'comm' (communication) or 'time' (run time)
-    file_path = f'{analyzing}_result.txt'  # print text result from method_profile.rs 
-    output_path = f'{analyzing}_result.xlsx'  # Path to your output Excel file
+    analyzing = parse_args().type  # 'comm' (communication) or 'time' (run time)
+    file_path = parse_args().file_path  # print text result from method_profile.rs 
+    output_path = parse_args().output_path  # Path to your output Excel file
 
     if analyzing == 'comm':
         analyzed_data = analyze_comm_text_file(file_path)

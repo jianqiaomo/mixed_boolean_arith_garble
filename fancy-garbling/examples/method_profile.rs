@@ -1,3 +1,4 @@
+use clap::{Arg, Command};
 use fancy_garbling::informer::Informer;
 use fancy_garbling::util::{factor, modulus_with_width, modulus_with_width_opt};
 use fancy_garbling::{
@@ -51,6 +52,11 @@ macro_rules! time_repeat_and_take_last {
     }};
 }
 
+/// `gb/ev.bin_encode()` or `gb/ev.bin_receive()`.
+/// * `party` - gb or ev object.
+/// * `enc0rec1` - 0 for encoding, 1 for receiving.
+/// * `enc_value` - value to encode.
+/// * `bitwidth` - bitwidth
 macro_rules! bin_encode_or_receive {
     ($party:expr, $enc0rec1:expr, $enc_value:expr, $bitwidth:expr) => {
         if $enc0rec1 == 0 {
@@ -63,6 +69,11 @@ macro_rules! bin_encode_or_receive {
     };
 }
 
+/// `gb/ev.crt_encode()` or `gb/ev.crt_receive()`.
+/// * `party` - gb or ev object.
+/// * `enc0rec1` - 0 for encoding, 1 for receiving.
+/// * `enc_value` - value to encode.
+/// * `crt_big_mod` - crt_encode big modulus N.
 macro_rules! crt_encode_or_receive {
     ($party:expr, $enc0rec1:expr, $enc_value:expr, $crt_big_mod:expr) => {
         if $enc0rec1 == 0 {
@@ -75,6 +86,14 @@ macro_rules! crt_encode_or_receive {
     };
 }
 
+/// match an operation and run it.
+/// * `party` - gb or ev object.
+/// * `gb0ev1` - 0 means garbler, 1 means evaluator.
+/// * `bund_method` - "Bin" for binary, "CRT" for CRT, "OPT" for optimized CRT.
+/// * `operate` - operation name to run.
+/// * `bitwidth` - bitwidth.
+/// * `crt_big_mod` - crt_encode big modulus N.
+/// * `repeat` - repeat times.
 macro_rules! run_match_operation {
     ($party:expr, $gb0ev1: expr, $bund_method:expr, $operate:expr, $bitwidth:expr, $crt_big_mod:expr, $repeat:expr) => {{
         match $bund_method {
@@ -84,18 +103,24 @@ macro_rules! run_match_operation {
                 match $operate {
                     "XOR" => {
                         let ys = bin_encode_or_receive!($party, $gb0ev1 ^ 1, 3, $bitwidth);
-                        let r = time_repeat_and_take_last!($gb0ev1, $party, bin_xor(&xs, &ys), $repeat);
+                        let r =
+                            time_repeat_and_take_last!($gb0ev1, $party, bin_xor(&xs, &ys), $repeat);
                         (BundleType::Binary(r.0), r.1)
                     }
                     "AND" => {
                         let ys = bin_encode_or_receive!($party, $gb0ev1 ^ 1, 3, $bitwidth);
-                        let r = time_repeat_and_take_last!($gb0ev1, $party, bin_and(&xs, &ys), $repeat);
+                        let r =
+                            time_repeat_and_take_last!($gb0ev1, $party, bin_and(&xs, &ys), $repeat);
                         (BundleType::Binary(r.0), r.1)
                     }
                     "Add" => {
                         let ys = bin_encode_or_receive!($party, $gb0ev1 ^ 1, 3, $bitwidth);
-                        let r =
-                            time_repeat_and_take_last!($gb0ev1, $party, bin_addition(&xs, &ys), $repeat);
+                        let r = time_repeat_and_take_last!(
+                            $gb0ev1,
+                            $party,
+                            bin_addition(&xs, &ys),
+                            $repeat
+                        );
                         (BundleType::Binary(r.0 .0), r.1)
                     }
                     "Sub" => {
@@ -103,7 +128,7 @@ macro_rules! run_match_operation {
                         let r = time_repeat_and_take_last!(
                             $gb0ev1,
                             $party,
-                            bin_subtraction(&xs, &ys),
+                            bin_subtraction_opt(&xs, &ys),
                             $repeat
                         );
                         (BundleType::Binary(r.0 .0), r.1)
@@ -118,22 +143,26 @@ macro_rules! run_match_operation {
                         (BundleType::Binary(r.0), r.1)
                     }
                     "Pub Exp" => {
-                        let r = time_repeat_and_take_last!($gb0ev1, $party, bin_cexp(&xs, 3), $repeat);
+                        let r =
+                            time_repeat_and_take_last!($gb0ev1, $party, bin_cexp(&xs, 3), $repeat);
                         (BundleType::Binary(r.0), r.1)
                     }
                     "Mul" => {
                         let ys = bin_encode_or_receive!($party, $gb0ev1 ^ 1, 3, $bitwidth);
-                        let r = time_repeat_and_take_last!($gb0ev1, $party, bin_mul(&xs, &ys), $repeat);
+                        let r =
+                            time_repeat_and_take_last!($gb0ev1, $party, bin_mul(&xs, &ys), $repeat);
                         (BundleType::Binary(r.0), r.1)
                     }
                     "Div" => {
                         let ys = bin_encode_or_receive!($party, $gb0ev1 ^ 1, 3, $bitwidth);
-                        let r = time_repeat_and_take_last!($gb0ev1, $party, bin_div(&xs, &ys), $repeat);
+                        let r =
+                            time_repeat_and_take_last!($gb0ev1, $party, bin_div(&xs, &ys), $repeat);
                         (BundleType::Binary(r.0), r.1)
                     }
                     "Mod" => {
                         let ys = bin_encode_or_receive!($party, $gb0ev1 ^ 1, 3, $bitwidth);
-                        let r = time_repeat_and_take_last!($gb0ev1, $party, bin_mod(&xs, &ys), $repeat);
+                        let r =
+                            time_repeat_and_take_last!($gb0ev1, $party, bin_mod(&xs, &ys), $repeat);
                         (BundleType::Binary(r.0), r.1)
                     }
                     "Mux" => {
@@ -148,7 +177,8 @@ macro_rules! run_match_operation {
                     }
                     "Geq" => {
                         let ys = bin_encode_or_receive!($party, $gb0ev1 ^ 1, 3, $bitwidth);
-                        let r = time_repeat_and_take_last!($gb0ev1, $party, bin_geq(&xs, &ys), $repeat);
+                        let r =
+                            time_repeat_and_take_last!($gb0ev1, $party, bin_geq(&xs, &ys), $repeat);
                         (BundleType::Binary(BinaryBundle::new(vec![r.0])), r.1)
                     }
                     "Bools to CRT" => {
@@ -168,31 +198,37 @@ macro_rules! run_match_operation {
                 match $operate {
                     "Add" => {
                         let ys = crt_encode_or_receive!($party, $gb0ev1 ^ 1, 3, $crt_big_mod);
-                        let r = time_repeat_and_take_last!($gb0ev1, $party, crt_add(&xs, &ys), $repeat);
+                        let r =
+                            time_repeat_and_take_last!($gb0ev1, $party, crt_add(&xs, &ys), $repeat);
                         (BundleType::CRT(r.0), r.1)
                     }
                     "Sub" => {
                         let ys = crt_encode_or_receive!($party, $gb0ev1 ^ 1, 3, $crt_big_mod);
-                        let r = time_repeat_and_take_last!($gb0ev1, $party, crt_sub(&xs, &ys), $repeat);
+                        let r =
+                            time_repeat_and_take_last!($gb0ev1, $party, crt_sub(&xs, &ys), $repeat);
                         (BundleType::CRT(r.0), r.1)
                     }
                     "Pub Mul" => {
-                        let r = time_repeat_and_take_last!($gb0ev1, $party, crt_cmul(&xs, 3), $repeat);
+                        let r =
+                            time_repeat_and_take_last!($gb0ev1, $party, crt_cmul(&xs, 3), $repeat);
                         (BundleType::CRT(r.0), r.1)
                     }
                     "Mul" => {
                         let ys = crt_encode_or_receive!($party, $gb0ev1 ^ 1, 3, $crt_big_mod);
-                        let r = time_repeat_and_take_last!($gb0ev1, $party, crt_mul(&xs, &ys), $repeat);
+                        let r =
+                            time_repeat_and_take_last!($gb0ev1, $party, crt_mul(&xs, &ys), $repeat);
                         (BundleType::CRT(r.0), r.1)
                     }
                     "Div" => {
                         let ys = crt_encode_or_receive!($party, $gb0ev1 ^ 1, 3, $crt_big_mod);
-                        let r = time_repeat_and_take_last!($gb0ev1, $party, crt_div(&xs, &ys), $repeat);
+                        let r =
+                            time_repeat_and_take_last!($gb0ev1, $party, crt_div(&xs, &ys), $repeat);
                         (BundleType::CRT(r.0), r.1)
                     }
                     "Mod" => {
                         let ys = crt_encode_or_receive!($party, $gb0ev1 ^ 1, 3, $crt_big_mod);
-                        let r = time_repeat_and_take_last!($gb0ev1, $party, crt_mod(&xs, &ys), $repeat);
+                        let r =
+                            time_repeat_and_take_last!($gb0ev1, $party, crt_mod(&xs, &ys), $repeat);
                         (BundleType::CRT(r.0), r.1)
                     }
                     "Mux" => {
@@ -213,12 +249,18 @@ macro_rules! run_match_operation {
                         (BundleType::CRT(r.0), r.1)
                     }
                     "Pub Exp" => {
-                        let r = time_repeat_and_take_last!($gb0ev1, $party, crt_cexp(&xs, 3), $repeat);
+                        let r =
+                            time_repeat_and_take_last!($gb0ev1, $party, crt_cexp(&xs, 3), $repeat);
                         (BundleType::CRT(r.0), r.1)
                     }
                     "Pub Mod" => {
                         let modp = xs.wires()[0].modulus();
-                        let r = time_repeat_and_take_last!($gb0ev1, $party, crt_rem(&xs, modp), $repeat);
+                        let r = time_repeat_and_take_last!(
+                            $gb0ev1,
+                            $party,
+                            crt_rem(&xs, modp),
+                            $repeat
+                        );
                         (BundleType::CRT(r.0), r.1)
                     }
                     "Geq" => {
@@ -248,33 +290,42 @@ macro_rules! run_match_operation {
     }};
 }
 
-fn profile_function(repeat: usize) {
+/// Profile different workloads.
+/// * `repeat` - The number of times to repeat the function.
+/// * `profile_type` - print result when: 0 for communication, 1 for runtime.
+fn profile_function(repeat: u16, profile_type: u16) {
+    assert!(
+        profile_type == 0 || profile_type == 1,
+        "Invalid profile type {}",
+        profile_type
+    );
+    let repeat = if profile_type == 0 { 1 } else { repeat };
     let binary_ops: Vec<&str> = vec![
-        // "XOR",
-        // "AND",
-        // "Add",
-        // "Sub",
-        // "Pub Mul",
-        // "Mul",
-        // "Div",
-        // "Mod",
-        // "Mux",
+        "XOR",
+        "AND",
+        "Add",
+        "Sub",
+        "Pub Mul",
+        "Mul",
+        "Div",
+        "Mod",
+        "Mux",
         "Geq",
-        // "Bools to CRT",
-        // "Pub Exp",
+        "Bools to CRT",
+        "Pub Exp",
     ];
     let crt_ops: Vec<&str> = vec![
-        // "Add",
-        // "Sub",
-        // "Pub Mul",
-        // "Mul",
-        // // "Div", // PMR
-        // // "Mod", // PMR
-        // "Mux",
-        // // "Geq", // PMR
-        // "Pub Mod",
-        // "Pub Exp",
-        // "CRT to Bools",
+        "Add",
+        "Sub",
+        "Pub Mul",
+        "Mul",
+        // "Div", // PMR
+        // "Mod", // PMR
+        "Mux",
+        // "Geq", // PMR
+        "Pub Mod",
+        "Pub Exp",
+        "CRT to Bools",
     ];
 
     // ************ Profile Start ************//
@@ -282,7 +333,7 @@ fn profile_function(repeat: usize) {
         .iter()
         .zip(vec![&binary_ops, &crt_ops.clone(), &crt_ops].iter())
     {
-        for bitwidth in (4..=8).step_by(4) {
+        for bitwidth in (4..=40).step_by(4) {
             for &operate in ops.iter() {
                 let (sender, receiver) = unix_channel_pair();
                 let crt_big_mod = match bund_method {
@@ -323,8 +374,11 @@ fn profile_function(repeat: usize) {
                             }
                         }
                     );
-                    println!(" Garbling time: {} us;", gb_microsecond);
-                    // println!("\n Gb Info: {}", gb.stats());
+                    if profile_type == 1 {
+                        println!(" Garbling time: {} us;", gb_microsecond);
+                    } else {
+                        println!("\n Gb Info: {}", gb.stats());
+                    }
                 });
 
                 //************ Evaluator ************//
@@ -346,24 +400,52 @@ fn profile_function(repeat: usize) {
                     BundleType::CRT(bundle) => ev.crt_reveal(&bundle).unwrap(),
                 };
                 handle.join().unwrap();
-                print!("Ev Output 5 op 3: {ev_output_reveal}; ");
-                print!(
-                    "Bundle {bund_method}{:?}; Bitwidth {bitwidth}; Operate {operate};",
-                    {
-                        match bund_method {
-                            "Bin" => vec![bitwidth as u16],
-                            "CRT" | "OPT" => factor(crt_big_mod),
-                            _ => panic!("Invalid bundle method {bund_method}"),
+                if profile_type == 1 {
+                    print!("Ev Output 5 op 3: {ev_output_reveal}; ");
+                    print!(
+                        "Bundle {bund_method}{:?}; Bitwidth {bitwidth}; Operate {operate};",
+                        {
+                            match bund_method {
+                                "Bin" => vec![bitwidth as u16],
+                                "CRT" | "OPT" => factor(crt_big_mod),
+                                _ => panic!("Invalid bundle method {bund_method}"),
+                            }
                         }
-                    }
-                );
-                println!(" Evaluating time: {} us;", ev_microsecond);
+                    );
+                    println!(" Evaluating time: {} us;", ev_microsecond);
+                }
             }
         }
     }
 }
 
 fn main() {
-    let repeat_test = 1024;
-    profile_function(repeat_test);
+    let matches = Command::new("method_profile")
+        .arg(
+            Arg::new("repeat")
+                .long("repeat")
+                .value_parser(clap::value_parser!(u16))
+                .required(true)
+                .help("Number of repetitions"),
+        )
+        .arg(
+            Arg::new("type")
+                .long("type")
+                .value_parser(clap::value_parser!(u16).range(0..=1))
+                .required(true)
+                .help("Type (0 or 1)"),
+        )
+        .get_matches();
+
+    let repeat_test = *matches
+        .get_one::<u16>("repeat")
+        .expect("Failed to get --repeat argument");
+    let communicate0_or_runtime1 = *matches
+        .get_one::<u16>("type")
+        .expect("Failed to get --type argument");
+
+    println!("Repeat: {repeat_test}");
+    println!("Type (0 comm, 1 run time): {communicate0_or_runtime1} \n");
+
+    profile_function(repeat_test, communicate0_or_runtime1);
 }
