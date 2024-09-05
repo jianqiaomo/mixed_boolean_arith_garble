@@ -15,7 +15,7 @@ for practical use in privacy-preserving computation.
 To explore how to use the conversion functions in this library, please refer 
 to the examples provided in the `profile` branch. 
 
-These examples will guide you in 
+Those examples will guide you in 
 performing operation profiling, including communication and runtime measurements.
 
 # Usage
@@ -56,7 +56,7 @@ The software requirements remain the same as those in the [swanky library](https
 
 # Acknowledgments
 
-This work is forked from [swanky (fancy garbling)](https://github.com/GaloisInc/swanky). 
+This work is forked from [swanky (fancy_garbling)](https://github.com/GaloisInc/swanky). 
 
 The mixed GC algorithm is based on the paper by Li and Liu (EUROCRYPT 2024), 
 _How to Garble Mixed Circuits that Combine Boolean and Arithmetic Computations_.
