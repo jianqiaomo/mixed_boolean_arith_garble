@@ -12,11 +12,45 @@ for practical use in privacy-preserving computation.
 
 # Profile
 
-To explore how to use the conversion functions in this library, please refer 
-to the examples provided in the [`profile`](https://anonymous.4open.science/r/mixed_boolean_arith_garble-0DEF) branch. 
+Before running, please refer to the [swanky](https://github.com/GaloisInc/swanky) repository
+for requirements and dependencies.
 
-Those examples will guide you in 
-performing operation profiling, including communication and runtime measurements.
+1. Operations are profiled using `fancy-garbling/examples/method_profile.rs`.
+
+You can run the profiling with the following command:
+
+```shell
+cd fancy-garbling
+cargo run --example method_profile --release -- --type 1 --repeat 20480 >> method_profile_result.txt
+```
+
+- `--type 0` profiles communication cost.
+- `--type 1` profiles runtime.
+- `--repeat` specifies the number of repetitions.
+
+Example for communication cost:
+
+```shell
+cargo run --example method_profile --release -- --type 0 --repeat 1 >> method_profile_result.txt
+```
+
+Results will be printed in `method_profile_result.txt` once the profiling is complete.
+
+2. You can use the script `fancy-garbling/scripts/method_profile_tabular.py` to organize the results into a table format.
+
+Before running the script, please make sure the result file `method_profile_result.txt` is in the same directory.
+
+**An overall example**:
+
+```shell
+cd fancy-garbling/scripts
+cargo run --example method_profile --release -- --type 0 --repeat 1 >> method_profile_result.txt
+python3 method_profile_tabular.py --type time
+```
+
+The result will be saved in an `.xlsx` file.
+
+---
 
 # Usage
 ## Conversion Functions
