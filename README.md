@@ -13,7 +13,7 @@ for practical use in privacy-preserving computation.
 # Profile
 
 To explore how to use the conversion functions in this library, please refer 
-to the examples provided in the `profile` branch. 
+to the examples provided in the [`profile`](https://anonymous.4open.science/r/mixed_boolean_arith_garble-0DEF) branch. 
 
 Those examples will guide you in 
 performing operation profiling, including communication and runtime measurements.
